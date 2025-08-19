@@ -186,6 +186,76 @@
   }
 }
 
+// PC-specific: Show messages when typing feature
+@mixin prv-show-msg-on-text-input {
+  // Show all messages
+  .chat-message:not(.multi-select-mode) {
+    .card:not(.card--oa):not(.card--sticker):not(.card--group-photo),
+    .call-message,
+    .call-msg,
+    .video-message__video-player {
+      > *:not(.zadark-translate-msg__button) {
+        opacity: 1 !important;
+      }
+    }
+
+    .img-msg-v2 .image-box__image {
+      opacity: 1 !important;
+    }
+
+    .img-msg-v2 .img-msg-v2__ft {
+      opacity: 1 !important;
+    }
+
+    .card--sticker--container,
+    .card--sticker .card--group-sticker__row__item {
+      opacity: 1 !important;
+      filter: none !important;
+    }
+
+    .video-message__video-player,
+    .card--group-photo .card--group-photo__row__item .image-box__image {
+      opacity: 1 !important;
+    }
+
+    // * Zalo >= v25.5.3
+    .img-msg-v2 .zimg-el,
+    .card--group-photo .zimg-el,
+    div[class*="video-message"] .zimg-el {
+      opacity: 1 !important;
+    }
+  }
+
+  .td-msg-v3,
+  .message-info_content,
+  .event-message__content,
+  .e2ee-event-info,
+  .reminder-info-v2 {
+    > * {
+      opacity: 1 !important;
+    }
+  }
+
+  // Pin message
+  .chat-group-topic__item .info-container > .content-container {
+    opacity: 1 !important;
+  }
+
+  // Show input area
+  // TODO: Zalo < v24.3.1 (Will be removed in the future)
+  .chat-input__content__input,
+  // * Zalo >= v24.3.1
+  .chat-box-input__content__input,
+  .chat-input-container--audit-2023 .chat-input-content,
+  // * Zalo >= v25.5.3
+  .chat-input-container {
+    #richInput,
+    .rich-text-input {
+      opacity: 1 !important;
+    }
+  }
+}
+
 // Conversation Info (Sidebar Right)
 @mixin prv-thread-chat-info {
   $opacity: 0.1;

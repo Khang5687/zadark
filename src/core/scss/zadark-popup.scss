@@ -552,6 +552,16 @@ body:not(.zadark--use-hotkeys) {
     &__hotkeys {
       margin-right: 12px;
     }
+
+    // Sub-settings styling
+    &--sub {
+      padding-left: 20px;
+      background-color: var(--zadark-bg-secondary);
+      
+      .zadark-switch__label {
+        font-size: 0.875rem;
+      }
+    }
   }
 
   .zadark-select {
@@ -1289,3 +1299,51 @@ tr.introjs-showElement > th {
 //   z-index: 1;
 //   opacity: 0;
 // }
+
+  .zadark-btn {
+    display: inline-block;
+    padding: 8px 16px;
+    border: 1px solid var(--zadark-border-base);
+    border-radius: var(--zadark-rounded-base);
+    background-color: var(--zadark-bg-base);
+    color: var(--zadark-text-primary);
+    font-family: var(--zadark-popup-font-family);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+
+    &:hover {
+      background-color: var(--zadark-bg-hover);
+      border-color: var(--zadark-border-hover);
+    }
+
+    &:active {
+      background-color: var(--zadark-bg-active);
+      transform: translateY(1px);
+    }
+
+    &--secondary {
+      background-color: var(--zadark-bg-secondary);
+      border-color: var(--zadark-border-light);
+
+      &:hover {
+        background-color: var(--zadark-bg-hover);
+        border-color: var(--zadark-border-base);
+      }
+    }
+
+    &--primary {
+      background-color: var(--zadark-primary-base);
+      border-color: var(--zadark-primary-base);
+      color: #fff;
+
+      &:hover {
+        background-color: var(--zadark-primary-dark);
+        border-color: var(--zadark-primary-dark);
+      }
+    }
+  }

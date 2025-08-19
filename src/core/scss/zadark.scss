@@ -2488,6 +2488,11 @@ body.zadark {
     @include prv.prv-thread-chat-info();
   }
 
+  // PC-specific: Show messages when typing
+  &.zadark-pc.zadark-prv--thread-chat-message.zadark-prv--show-msg-on-text-input.zadark-prv--typing-active #chatView {
+    @include prv.prv-show-msg-on-text-input();
+  }
+
   &.zadark-prv--conv-avatar {
     @include prv.prv-conv-avatar();
   }

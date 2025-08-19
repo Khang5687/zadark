@@ -23,6 +23,8 @@
   const ZADARK_ENABLED_HIDE_CONV_AVATAR_KEY = '@ZaDark:ENABLED_HIDE_CONV_AVATAR'
   const ZADARK_ENABLED_HIDE_CONV_NAME_KEY = '@ZaDark:ENABLED_HIDE_CONV_NAME'
   const ZADARK_ENABLED_HIDE_THREAD_CHAT_MESSAGE_KEY = '@ZaDark:ENABLED_HIDE_THREAD_CHAT_MESSAGE'
+  const ZADARK_ENABLED_SHOW_MESSAGE_ON_TEXTING_INPUT_KEY = '@ZaDark:ENABLED_SHOW_MESSAGE_ON_TEXTING_INPUT'
+  const ZADARK_HIDE_MESSAGE_TIMEOUT_MS_KEY = '@ZaDark:HIDE_MESSAGE_TIMEOUT_MS'
 
   const ZADARK_ENABLED_BLOCK_TYPING_KEY = '@ZaDark:ENABLED_BLOCK_TYPING'
   const ZADARK_ENABLED_BLOCK_DELIVERED_KEY = '@ZaDark:ENABLED_BLOCK_DELIVERED'
@@ -221,6 +223,20 @@
       return localStorage.getItem(ZADARK_ENABLED_HIDE_THREAD_CHAT_MESSAGE_KEY) === 'true'
     },
 
+    saveEnabledShowMessageOnTextingInput: (isEnabled) => {
+      return localStorage.setItem(ZADARK_ENABLED_SHOW_MESSAGE_ON_TEXTING_INPUT_KEY, isEnabled)
+    },
+    getEnabledShowMessageOnTextingInput: () => {
+      return localStorage.getItem(ZADARK_ENABLED_SHOW_MESSAGE_ON_TEXTING_INPUT_KEY) === 'true'
+    },
+
+    saveHideMessageTimeoutMs: (timeoutMs) => {
+      return localStorage.setItem(ZADARK_HIDE_MESSAGE_TIMEOUT_MS_KEY, timeoutMs)
+    },
+    getHideMessageTimeoutMs: () => {
+      return parseInt(localStorage.getItem(ZADARK_HIDE_MESSAGE_TIMEOUT_MS_KEY) || '3000', 10)
+    },
+
     saveBlockSettings: (blockId, isEnabled) => {
       const key = BLOCK_STORAGE_KEYS[blockId]
       if (key) {
@@ -260,6 +276,78 @@
     },
     setMigrationDone: () => {
       return localStorage.setItem(ZADARK_MIGRATION_KEY, ZADARK_MIGRATION_VALUE)
+    }
+  }
+
+  const ZaDarkLogger = {
+    maxLogs: 500,
+    storageKey: '@ZaDark:DEBUG_LOGS',
+
+    log: function (level, message, data = null) {
+      const timestamp = new Date().toISOString()
+      const logEntry = {
+        timestamp,
+        level,
+        message,
+        data: data ? JSON.stringify(data, null, 2) : null
+      }
+
+      // Also log to console if available
+      if (window.console) {
+        const consoleMethod = console[level] || console.log
+        consoleMethod(`[ZaDark ${level.toUpperCase()}] ${message}`, data || '')
+      }
+
+      try {
+        // Get existing logs
+        const existingLogs = JSON.parse(localStorage.getItem(this.storageKey) || '[]')
+
+        // Add new log
+        existingLogs.push(logEntry)
+
+        // Keep only recent logs
+        if (existingLogs.length > this.maxLogs) {
+          existingLogs.splice(0, existingLogs.length - this.maxLogs)
+        }
+
+        // Save back to localStorage
+        localStorage.setItem(this.storageKey, JSON.stringify(existingLogs))
+      } catch (error) {
+        // Fallback if localStorage fails
+        if (window.console) {
+          console.error('[ZaDark] Failed to save log:', error)
+        }
+      }
+    },
+
+    debug: function (message, data) { this.log('debug', message, data) },
+    info: function (message, data) { this.log('info', message, data) },
+    warn: function (message, data) { this.log('warn', message, data) },
+    error: function (message, data) { this.log('error', message, data) },
+
+    getLogs: function () {
+      try {
+        return JSON.parse(localStorage.getItem(this.storageKey) || '[]')
+      } catch (error) {
+        return []
+      }
+    },
+
+    clearLogs: function () {
+      localStorage.removeItem(this.storageKey)
+    },
+
+    exportLogs: function () {
+      const logs = this.getLogs()
+      const logText = logs.map(log => {
+        let line = `[${log.timestamp}] ${log.level.toUpperCase()}: ${log.message}`
+        if (log.data) {
+          line += `\nData: ${log.data}`
+        }
+        return line
+      }).join('\n\n')
+
+      return logText
     }
   }
 
@@ -565,6 +653,44 @@
       ZaDarkStorage.saveEnabledHideThreadChatMessage(isEnabled)
       this.toggleBodyClassName('zadark-prv--thread-chat-message', isEnabled)
       this.showToast(HOTKEYS_TOAST_MESSAGE.hideThreadChatMessage[isEnabled])
+
+      // Show/hide sub-settings
+      if (isEnabled) {
+        $(subSettingsShowOnTextingElName).slideDown(200)
+        const showOnTexting = ZaDarkStorage.getEnabledShowMessageOnTextingInput()
+        if (showOnTexting) {
+          $(subSettingsTimeoutElName).slideDown(200)
+        }
+      } else {
+        $(subSettingsShowOnTextingElName).slideUp(200)
+        $(subSettingsTimeoutElName).slideUp(200)
+      }
+    },
+
+    updateShowMessageOnTextingInput: function (isEnabled) {
+      ZaDarkStorage.saveEnabledShowMessageOnTextingInput(isEnabled)
+      this.toggleBodyClassName('zadark-prv--show-msg-on-text-input', isEnabled)
+
+      // Show/hide timeout setting
+      if (isEnabled) {
+        $(subSettingsTimeoutElName).slideDown(200)
+        // Add delay to ensure DOM is ready
+        setTimeout(() => {
+          this.initTypingDetection(isEnabled)
+        }, 100)
+      } else {
+        $(subSettingsTimeoutElName).slideUp(200)
+        this.removeTypingDetection()
+      }
+    },
+
+    updateHideMessageTimeoutMs: function (timeoutMs) {
+      ZaDarkStorage.saveHideMessageTimeoutMs(timeoutMs)
+      // Re-initialize typing detection with new timeout
+      const isEnabled = ZaDarkStorage.getEnabledShowMessageOnTextingInput()
+      if (isEnabled) {
+        this.initTypingDetection(true)
+      }
     },
 
     updateBlockSettings: function (blockId, isEnabled) {
@@ -586,6 +712,316 @@
       const zadarkVersion = $('html').data('zadark-version')
       ZaDarkStorage.saveKnownVersion(zadarkVersion)
       buttonEl.classList.remove('zadark-known-version')
+    },
+
+    openDevTools: function () {
+      try {
+        // Try multiple methods to open DevTools
+        if (window.require) {
+          // Method 1: Using require (if available)
+          const { webContents } = window.require('electron')
+          const currentWebContents = webContents.getFocusedWebContents() || webContents.getAllWebContents()[0]
+          if (currentWebContents) {
+            currentWebContents.openDevTools()
+            this.showToast('Đã mở Developer Tools')
+            return
+          }
+        }
+
+        if (window.electronAPI && window.electronAPI.openDevTools) {
+          // Method 2: Custom electronAPI
+          window.electronAPI.openDevTools()
+          this.showToast('Đã mở Developer Tools')
+          return
+        }
+
+        if (window.$zelectron && window.$zelectron.openDevTools) {
+          // Method 3: Zalo's custom electron API
+          window.$zelectron.openDevTools()
+          this.showToast('Đã mở Developer Tools')
+          return
+        }
+
+        // Method 4: Try to access through webContents directly
+        if (window.webContents) {
+          window.webContents.openDevTools()
+          this.showToast('Đã mở Developer Tools')
+          return
+        }
+
+        // Method 5: Fallback - try global electron
+        if (window.electron && window.electron.webContents) {
+          window.electron.webContents.openDevTools()
+          this.showToast('Đã mở Developer Tools')
+          return
+        }
+
+        ZaDarkLogger.debug('Available DevTools methods', {
+          require: !!window.require,
+          electronAPI: !!window.electronAPI,
+          $zelectron: !!window.$zelectron,
+          webContents: !!window.webContents,
+          electron: !!window.electron
+        })
+
+        this.showToast('Không thể mở Developer Tools. Thử nhấn F12 hoặc Ctrl+Shift+I', {
+          className: 'toastify--warning',
+          duration: 5000
+        })
+      } catch (error) {
+        ZaDarkLogger.error('Error opening DevTools', { error: error.message, stack: error.stack })
+        this.showToast('Lỗi khi mở Developer Tools: ' + error.message, {
+          className: 'toastify--error',
+          duration: 5000
+        })
+      }
+    },
+
+    viewLogs: function () {
+      const logs = ZaDarkLogger.getLogs()
+      if (logs.length === 0) {
+        this.showToast('Không có debug logs nào')
+        return
+      }
+
+      const logText = logs.slice(-20).map(log => {
+        const time = new Date(log.timestamp).toLocaleTimeString('vi-VN')
+        let line = `[${time}] ${log.level.toUpperCase()}: ${log.message}`
+        if (log.data && log.data !== 'null') {
+          line += `\n${log.data}`
+        }
+        return line
+      }).join('\n\n')
+
+      // Create a temporary text area to show logs
+      const textarea = document.createElement('textarea')
+      textarea.value = `ZaDark Debug Logs (20 mới nhất):\n\n${logText}`
+      textarea.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 80%;
+        height: 60%;
+        z-index: 999999;
+        background: white;
+        color: black;
+        border: 2px solid #ccc;
+        border-radius: 8px;
+        padding: 16px;
+        font-family: monospace;
+        font-size: 12px;
+        resize: none;
+      `
+      textarea.readOnly = true
+
+      const overlay = document.createElement('div')
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.7);
+        z-index: 999998;
+      `
+
+      const closeButton = document.createElement('button')
+      closeButton.textContent = 'Đóng'
+      closeButton.style.cssText = `
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: #f44336;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+      `
+
+      const closeModal = () => {
+        document.body.removeChild(overlay)
+        document.body.removeChild(textarea)
+      }
+
+      closeButton.onclick = closeModal
+      overlay.onclick = closeModal
+      textarea.appendChild(closeButton)
+
+      document.body.appendChild(overlay)
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+    },
+
+    exportLogsToFile: function () {
+      try {
+        const logText = ZaDarkLogger.exportLogs()
+        const blob = new Blob([logText], { type: 'text/plain;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `zadark-debug-logs-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+
+        this.showToast('Đã xuất debug logs thành công')
+      } catch (error) {
+        this.showToast('Lỗi khi xuất logs: ' + error.message, {
+          className: 'toastify--error'
+        })
+      }
+    },
+
+    clearLogs: function () {
+      ZaDarkLogger.clearLogs()
+      this.showToast('Đã xóa tất cả debug logs')
+    },
+
+    typingTimeout: null,
+    isMouseInMessageArea: false,
+    isMouseInInputArea: false,
+
+    initTypingDetection: function (isEnabled) {
+      if (!isEnabled) {
+        this.removeTypingDetection()
+        return
+      }
+
+      const self = this
+      const timeoutMs = ZaDarkStorage.getHideMessageTimeoutMs()
+
+      // Remove existing listeners first
+      this.removeTypingDetection()
+
+      ZaDarkLogger.info('Initializing typing detection with timeout: ' + timeoutMs + 'ms')
+      ZaDarkLogger.debug('Body classes: ' + document.body.className)
+
+      // Input event handler for typing detection
+      const handleTyping = function (event) {
+        const hideThreadChatMessage = ZaDarkStorage.getEnabledHideThreadChatMessage()
+        const showOnTexting = ZaDarkStorage.getEnabledShowMessageOnTextingInput()
+
+        ZaDarkLogger.debug('Typing detected on element', {
+          targetTag: event.target.tagName,
+          targetId: event.target.id,
+          targetClass: event.target.className,
+          hideThreadChatMessage,
+          showOnTexting
+        })
+
+        if (!hideThreadChatMessage || !showOnTexting) return
+
+        // Clear existing timeout
+        if (self.typingTimeout) {
+          clearTimeout(self.typingTimeout)
+          self.typingTimeout = null
+        }
+
+        // Add class to show both sections
+        document.body.classList.add('zadark-prv--typing-active')
+        ZaDarkLogger.debug('Added typing-active class')
+
+        // Set new timeout only if mouse is not hovering either area
+        if (!self.isMouseInMessageArea && !self.isMouseInInputArea) {
+          if (timeoutMs === 0) {
+            // Immediate hide when timeout is 0
+            document.body.classList.remove('zadark-prv--typing-active')
+            ZaDarkLogger.debug('Immediate hide (timeout=0)')
+          } else {
+            self.typingTimeout = setTimeout(() => {
+              // Only hide if mouse is still not hovering
+              if (!self.isMouseInMessageArea && !self.isMouseInInputArea) {
+                document.body.classList.remove('zadark-prv--typing-active')
+                ZaDarkLogger.debug('Removed typing-active class after timeout')
+              }
+            }, timeoutMs)
+          }
+        }
+      }
+
+      // Mouse enter/leave handlers for message view
+      const handleMessageMouseEnter = function () {
+        self.isMouseInMessageArea = true
+        // Clear timeout when mouse enters
+        if (self.typingTimeout) {
+          clearTimeout(self.typingTimeout)
+          self.typingTimeout = null
+        }
+      }
+
+      const handleMessageMouseLeave = function () {
+        self.isMouseInMessageArea = false
+        // If typing class is active and mouse left both areas, remove it immediately
+        if (!self.isMouseInInputArea && document.body.classList.contains('zadark-prv--typing-active')) {
+          document.body.classList.remove('zadark-prv--typing-active')
+        }
+      }
+
+      // Mouse enter/leave handlers for input area
+      const handleInputMouseEnter = function () {
+        self.isMouseInInputArea = true
+        // Clear timeout when mouse enters
+        if (self.typingTimeout) {
+          clearTimeout(self.typingTimeout)
+          self.typingTimeout = null
+        }
+      }
+
+      const handleInputMouseLeave = function () {
+        self.isMouseInInputArea = false
+        // If typing class is active and mouse left both areas, remove it immediately
+        if (!self.isMouseInMessageArea && document.body.classList.contains('zadark-prv--typing-active')) {
+          document.body.classList.remove('zadark-prv--typing-active')
+        }
+      }
+
+      // Test multiple possible input selectors and attach listeners
+      const inputSelectors = [
+        '#richInput',
+        '.rich-text-input',
+        '[contenteditable="true"]',
+        '.chat-input input',
+        '.chat-input textarea',
+        '.chat-box-input input',
+        '.chat-box-input textarea'
+      ]
+
+      // Attach event listeners to all possible input elements
+      inputSelectors.forEach(selector => {
+        $(document).on('input.zadarkTyping keydown.zadarkTyping', selector, handleTyping)
+      })
+
+      ZaDarkLogger.info('Attached typing listeners to selectors', { selectors: inputSelectors })
+
+      $(document).on('mouseenter.zadarkTyping', '#messageView', handleMessageMouseEnter)
+      $(document).on('mouseleave.zadarkTyping', '#messageView', handleMessageMouseLeave)
+      $(document).on('mouseenter.zadarkTyping', '.chat-input__content__input, .chat-box-input__content__input, .chat-input-container--audit-2023, .chat-input-container', handleInputMouseEnter)
+      $(document).on('mouseleave.zadarkTyping', '.chat-input__content__input, .chat-box-input__content__input, .chat-input-container--audit-2023, .chat-input-container', handleInputMouseLeave)
+    },
+
+    removeTypingDetection: function () {
+      ZaDarkLogger.info('Removing typing detection')
+
+      // Clear any existing timeout
+      if (this.typingTimeout) {
+        clearTimeout(this.typingTimeout)
+        this.typingTimeout = null
+      }
+
+      // Remove event listeners
+      $(document).off('.zadarkTyping')
+
+      // Remove typing active class
+      document.body.classList.remove('zadark-prv--typing-active')
+
+      // Reset mouse states
+      this.isMouseInMessageArea = false
+      this.isMouseInInputArea = false
     },
 
     showIntroHideThreadChatMessage: function ({ onExit, onComplete } = {}) {
@@ -701,6 +1137,14 @@
   const switchHideConvAvatarElName = '#js-switch-hide-conv-avatar'
   const switchHideConvNameElName = '#js-switch-hide-conv-name'
   const switchHideThreadChatMessageElName = '#js-switch-hide-thread-chat-message'
+  const switchShowMsgOnTextingElName = '#js-switch-show-msg-on-texting'
+  const selectHideMsgTimeoutElName = '#js-select-hide-msg-timeout'
+  const subSettingsShowOnTextingElName = '#js-sub-settings-show-on-texting'
+  const subSettingsTimeoutElName = '#js-sub-settings-timeout'
+  const btnOpenDevToolsElName = '#js-btn-open-devtools'
+  const btnViewLogsElName = '#js-btn-view-logs'
+  const btnExportLogsElName = '#js-btn-export-logs'
+  const btnClearLogsElName = '#js-btn-clear-logs'
 
   const switchBlockTypingElName = '#js-switch-block-typing'
   const switchBlockSeenElName = '#js-switch-block-seen'
@@ -919,7 +1363,7 @@
               </label>
             </div>
 
-            <div class="zadark-switch zadark-switch--border-default">
+            <div class="zadark-switch">
               <label class="zadark-switch__label zadark-switch__label--helper" for="js-switch-hide-thread-chat-message">
                 Ẩn <strong>Tin nhắn</strong> trong cuộc trò chuyện
                 <i class="zadark-icon zadark-icon--play-circle" data-zdk-intro="hideThreadChatMessage" data-tippy-content="Nhấn vào để xem hướng dẫn"></i>
@@ -931,6 +1375,31 @@
                 <input class="zadark-switch__input" type="checkbox" id="js-switch-hide-thread-chat-message">
                 <span class="zadark-switch__slider"></span>
               </label>
+            </div>
+
+            <div class="zadark-switch zadark-switch--sub" id="js-sub-settings-show-on-texting" style="display: none;">
+              <label class="zadark-switch__label zadark-switch__label--helper" for="js-switch-show-msg-on-texting">
+                &nbsp;&nbsp;&nbsp;&nbsp;Hiển thị khi đang nhắn tin
+                <i class="zadark-icon zadark-icon--question" data-tippy-content="Cheese"></i>
+              </label>
+              <label class="zadark-switch__checkbox">
+                <input class="zadark-switch__input" type="checkbox" id="js-switch-show-msg-on-texting">
+                <span class="zadark-switch__slider"></span>
+              </label>
+            </div>
+
+            <div class="zadark-switch zadark-switch--sub zadark-switch--border-default" id="js-sub-settings-timeout" style="display: none;">
+              <label class="zadark-switch__label zadark-switch__label--helper" style="flex: 1;">
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Ẩn tin nhắn khi ngừng nhập sau:
+              </label>
+              <select id="js-select-hide-msg-timeout" class="zadark-select" style="width: 100px;">
+                <option value="0">Ngay lập tức</option>
+                <option value="1000">1 giây</option>
+                <option value="2000">2 giây</option>
+                <option value="3000">3 giây</option>
+                <option value="5000">5 giây</option>
+                <option value="10000">10 giây</option>
+              </select>
             </div>
 
             <div class="zadark-switch">
@@ -1018,6 +1487,27 @@
                 <span class="zadark-switch__slider"></span>
               </label>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="zadark-panel">
+        <div class="zadark-panel__body">
+          <div style="padding: 8px 0;">
+            <button id="js-btn-open-devtools" class="zadark-btn zadark-btn--secondary" style="width: 100%; margin-bottom: 8px;">
+              Mở Developer Tools (Debug)
+            </button>
+            <div style="display: flex; gap: 8px;">
+              <button id="js-btn-view-logs" class="zadark-btn zadark-btn--secondary" style="flex: 1;">
+                Xem Debug Logs
+              </button>
+              <button id="js-btn-export-logs" class="zadark-btn zadark-btn--secondary" style="flex: 1;">
+                Xuất Logs
+              </button>
+            </div>
+            <button id="js-btn-clear-logs" class="zadark-btn zadark-btn--secondary" style="width: 100%; margin-top: 8px; font-size: 0.75rem;">
+              Xóa Debug Logs
+            </button>
           </div>
         </div>
       </div>
@@ -1203,6 +1693,26 @@
 
     const enabledHideThreadChatMessage = ZaDarkStorage.getEnabledHideThreadChatMessage()
     ZaDarkUtils.setSwitch(switchHideThreadChatMessageElName, enabledHideThreadChatMessage)
+
+    // Load sub-settings
+    const enabledShowMessageOnTextingInput = ZaDarkStorage.getEnabledShowMessageOnTextingInput()
+    ZaDarkUtils.setSwitch(switchShowMsgOnTextingElName, enabledShowMessageOnTextingInput)
+
+    const hideMessageTimeoutMs = ZaDarkStorage.getHideMessageTimeoutMs()
+    ZaDarkUtils.setSelect(selectHideMsgTimeoutElName, hideMessageTimeoutMs)
+
+    // Show/hide sub-settings based on parent state
+    if (enabledHideThreadChatMessage) {
+      $(subSettingsShowOnTextingElName).show()
+      if (enabledShowMessageOnTextingInput) {
+        $(subSettingsTimeoutElName).show()
+      } else {
+        $(subSettingsTimeoutElName).hide()
+      }
+    } else {
+      $(subSettingsShowOnTextingElName).hide()
+      $(subSettingsTimeoutElName).hide()
+    }
 
     if (isSupportFeatureBlock) {
       const blockSettings = ZaDarkStorage.getBlockSettings()
@@ -1439,6 +1949,16 @@
       ZaDarkUtils.updateHideThreadChatMessage(isEnabled)
     })
 
+    $(switchShowMsgOnTextingElName).on('change', function () {
+      const isEnabled = $(this).is(':checked')
+      ZaDarkUtils.updateShowMessageOnTextingInput(isEnabled)
+    })
+
+    $(selectHideMsgTimeoutElName).on('change', function () {
+      const timeoutMs = parseInt($(this).val(), 10)
+      ZaDarkUtils.updateHideMessageTimeoutMs(timeoutMs)
+    })
+
     $(switchBlockTypingElName).on('change', handleBlockSettingsChange('block_typing'))
     $(switchBlockSeenElName).on('change', handleBlockSettingsChange('block_seen'))
     $(switchBlockDeliveredElName).on('change', handleBlockSettingsChange('block_delivered'))
@@ -1447,6 +1967,22 @@
       const isEnabled = $(this).is(':checked')
       ZaDarkUtils.updateUseHotkeys(isEnabled)
       loadHotkeys(isEnabled)
+    })
+
+    $(btnOpenDevToolsElName).on('click', function () {
+      ZaDarkUtils.openDevTools()
+    })
+
+    $(btnViewLogsElName).on('click', function () {
+      ZaDarkUtils.viewLogs()
+    })
+
+    $(btnExportLogsElName).on('click', function () {
+      ZaDarkUtils.exportLogsToFile()
+    })
+
+    $(btnClearLogsElName).on('click', function () {
+      ZaDarkUtils.clearLogs()
     })
 
     const popupEl = document.querySelector('#js-zadark-popup')
@@ -1502,8 +2038,36 @@
 
     document.addEventListener('@ZaDark:CONV_ID_CHANGE', function () {
       loadThreadChatBg()
+
+      // Re-initialize typing detection when conversation changes
+      // (this ensures input elements are available)
+      const enabledHideThreadChatMessage = ZaDarkStorage.getEnabledHideThreadChatMessage()
+      const enabledShowMessageOnTextingInput = ZaDarkStorage.getEnabledShowMessageOnTextingInput()
+      if (enabledHideThreadChatMessage && enabledShowMessageOnTextingInput) {
+        ZaDarkLogger.info('Re-initializing typing detection for new conversation')
+        setTimeout(() => {
+          ZaDarkUtils.initTypingDetection(true)
+        }, 500) // Wait for chat interface to load
+      }
     })
+
+    // Initialize typing detection if enabled (initial load)
+    const enabledHideThreadChatMessage = ZaDarkStorage.getEnabledHideThreadChatMessage()
+    const enabledShowMessageOnTextingInput = ZaDarkStorage.getEnabledShowMessageOnTextingInput()
+    if (enabledHideThreadChatMessage && enabledShowMessageOnTextingInput) {
+      ZaDarkLogger.info('Initial typing detection setup')
+      setTimeout(() => {
+        ZaDarkUtils.initTypingDetection(true)
+      }, 1000) // Wait for UI to fully load
+    }
   }
+
+  // Initialize logging
+  ZaDarkLogger.info('ZaDark PC loaded', {
+    version: ZaDarkUtils.getZaDarkVersion(),
+    userAgent: navigator.userAgent,
+    location: window.location.href
+  })
 
   const observer = new MutationObserver((mutationsList) => {
     mutationsList.forEach((mutation) => {

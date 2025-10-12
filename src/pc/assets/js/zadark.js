@@ -698,10 +698,13 @@
         $(subSettingsTimeoutElName).slideDown(200)
         // Only initialize if not already initialized
         if (!this.typingDetectionInitialized) {
-          // Add delay to ensure DOM is ready
-          setTimeout(() => {
-            this.initTypingDetection(isEnabled)
-          }, 100)
+          // Use requestAnimationFrame for faster, non-blocking initialization
+          const self = this
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              self.initTypingDetection(isEnabled)
+            })
+          })
         } else {
           // Just update the cached settings
           if (this.typingDetectionSettings) {

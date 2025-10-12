@@ -407,6 +407,20 @@
       this.toggleBodyClassName('zadark-prv--thread-chat-message', isEnabled)
     },
 
+    setShowMessageOnTextingInputAttr: function (isEnabled) {
+      this.toggleBodyClassName('zadark-prv--show-msg-on-text-input', isEnabled)
+      // Initialize typing detection if both parent and sub-setting are enabled
+      if (isEnabled) {
+        const enabledHideThreadChatMessage = ZaDarkStorage.getEnabledHideThreadChatMessage()
+        if (enabledHideThreadChatMessage) {
+          // Delay initialization to ensure DOM is ready
+          setTimeout(() => {
+            this.initTypingDetection(true)
+          }, 1000)
+        }
+      }
+    },
+
     setUseHotkeysAttr: function (isEnabled) {
       this.toggleBodyClassName('zadark--use-hotkeys', isEnabled)
     },
@@ -561,6 +575,10 @@
 
       const enabledHideThreadChatMessage = ZaDarkStorage.getEnabledHideThreadChatMessage()
       this.setHideThreadChatMessageAttr(enabledHideThreadChatMessage)
+
+      // Initialize sub-setting for showing messages on texting input
+      const enabledShowMessageOnTextingInput = ZaDarkStorage.getEnabledShowMessageOnTextingInput()
+      this.setShowMessageOnTextingInputAttr(enabledShowMessageOnTextingInput)
 
       const useHotkeys = ZaDarkStorage.getUseHotkeys()
       this.setUseHotkeysAttr(useHotkeys)
@@ -2051,15 +2069,7 @@
       }
     })
 
-    // Initialize typing detection if enabled (initial load)
-    const enabledHideThreadChatMessage = ZaDarkStorage.getEnabledHideThreadChatMessage()
-    const enabledShowMessageOnTextingInput = ZaDarkStorage.getEnabledShowMessageOnTextingInput()
-    if (enabledHideThreadChatMessage && enabledShowMessageOnTextingInput) {
-      ZaDarkLogger.info('Initial typing detection setup')
-      setTimeout(() => {
-        ZaDarkUtils.initTypingDetection(true)
-      }, 1000) // Wait for UI to fully load
-    }
+    // Note: Initial typing detection is now handled in initPageSettings()
   }
 
   // Initialize logging

@@ -413,10 +413,14 @@
       if (isEnabled) {
         const enabledHideThreadChatMessage = ZaDarkStorage.getEnabledHideThreadChatMessage()
         if (enabledHideThreadChatMessage) {
-          // Delay initialization to ensure DOM is ready
-          setTimeout(() => {
-            this.initTypingDetection(true)
-          }, 1000)
+          // Use requestAnimationFrame for faster, non-blocking initialization
+          // Double RAF ensures DOM has been painted
+          const self = this
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              self.initTypingDetection(true)
+            })
+          })
         }
       }
     },
@@ -692,10 +696,18 @@
       // Show/hide timeout setting
       if (isEnabled) {
         $(subSettingsTimeoutElName).slideDown(200)
-        // Add delay to ensure DOM is ready
-        setTimeout(() => {
-          this.initTypingDetection(isEnabled)
-        }, 100)
+        // Only initialize if not already initialized
+        if (!this.typingDetectionInitialized) {
+          // Add delay to ensure DOM is ready
+          setTimeout(() => {
+            this.initTypingDetection(isEnabled)
+          }, 100)
+        } else {
+          // Just update the cached settings
+          if (this.typingDetectionSettings) {
+            this.typingDetectionSettings.showOnTexting = true
+          }
+        }
       } else {
         $(subSettingsTimeoutElName).slideUp(200)
         this.removeTypingDetection()
@@ -704,10 +716,10 @@
 
     updateHideMessageTimeoutMs: function (timeoutMs) {
       ZaDarkStorage.saveHideMessageTimeoutMs(timeoutMs)
-      // Re-initialize typing detection with new timeout
-      const isEnabled = ZaDarkStorage.getEnabledShowMessageOnTextingInput()
-      if (isEnabled) {
-        this.initTypingDetection(true)
+      // Update cached settings if typing detection is active
+      if (this.typingDetectionSettings) {
+        this.typingDetectionSettings.timeoutMs = timeoutMs
+        ZaDarkLogger.info('Updated timeout setting to ' + timeoutMs + 'ms')
       }
     },
 
@@ -903,6 +915,8 @@
     typingTimeout: null,
     isMouseInMessageArea: false,
     isMouseInInputArea: false,
+    typingDetectionInitialized: false,
+    typingDetectionSettings: null, // Cache settings to avoid localStorage reads
 
     initTypingDetection: function (isEnabled) {
       if (!isEnabled) {
@@ -910,29 +924,28 @@
         return
       }
 
+      // Prevent re-initialization if already active
+      if (this.typingDetectionInitialized) {
+        ZaDarkLogger.debug('Typing detection already initialized, skipping')
+        return
+      }
+
       const self = this
-      const timeoutMs = ZaDarkStorage.getHideMessageTimeoutMs()
 
-      // Remove existing listeners first
-      this.removeTypingDetection()
+      // Cache settings once during initialization
+      this.typingDetectionSettings = {
+        hideThreadChatMessage: ZaDarkStorage.getEnabledHideThreadChatMessage(),
+        showOnTexting: ZaDarkStorage.getEnabledShowMessageOnTextingInput(),
+        timeoutMs: ZaDarkStorage.getHideMessageTimeoutMs()
+      }
 
-      ZaDarkLogger.info('Initializing typing detection with timeout: ' + timeoutMs + 'ms')
-      ZaDarkLogger.debug('Body classes: ' + document.body.className)
+      ZaDarkLogger.info('Initializing typing detection with timeout: ' + this.typingDetectionSettings.timeoutMs + 'ms')
 
       // Input event handler for typing detection
       const handleTyping = function (event) {
-        const hideThreadChatMessage = ZaDarkStorage.getEnabledHideThreadChatMessage()
-        const showOnTexting = ZaDarkStorage.getEnabledShowMessageOnTextingInput()
-
-        ZaDarkLogger.debug('Typing detected on element', {
-          targetTag: event.target.tagName,
-          targetId: event.target.id,
-          targetClass: event.target.className,
-          hideThreadChatMessage,
-          showOnTexting
-        })
-
-        if (!hideThreadChatMessage || !showOnTexting) return
+        // Use cached settings instead of reading localStorage every time
+        const settings = self.typingDetectionSettings
+        if (!settings || !settings.hideThreadChatMessage || !settings.showOnTexting) return
 
         // Clear existing timeout
         if (self.typingTimeout) {
@@ -942,22 +955,19 @@
 
         // Add class to show both sections
         document.body.classList.add('zadark-prv--typing-active')
-        ZaDarkLogger.debug('Added typing-active class')
 
         // Set new timeout only if mouse is not hovering either area
         if (!self.isMouseInMessageArea && !self.isMouseInInputArea) {
-          if (timeoutMs === 0) {
+          if (settings.timeoutMs === 0) {
             // Immediate hide when timeout is 0
             document.body.classList.remove('zadark-prv--typing-active')
-            ZaDarkLogger.debug('Immediate hide (timeout=0)')
           } else {
             self.typingTimeout = setTimeout(() => {
               // Only hide if mouse is still not hovering
               if (!self.isMouseInMessageArea && !self.isMouseInInputArea) {
                 document.body.classList.remove('zadark-prv--typing-active')
-                ZaDarkLogger.debug('Removed typing-active class after timeout')
               }
-            }, timeoutMs)
+            }, settings.timeoutMs)
           }
         }
       }
@@ -1014,15 +1024,22 @@
         $(document).on('input.zadarkTyping keydown.zadarkTyping', selector, handleTyping)
       })
 
-      ZaDarkLogger.info('Attached typing listeners to selectors', { selectors: inputSelectors })
+      ZaDarkLogger.info('Attached typing listeners to ' + inputSelectors.length + ' selectors')
 
       $(document).on('mouseenter.zadarkTyping', '#messageView', handleMessageMouseEnter)
       $(document).on('mouseleave.zadarkTyping', '#messageView', handleMessageMouseLeave)
       $(document).on('mouseenter.zadarkTyping', '.chat-input__content__input, .chat-box-input__content__input, .chat-input-container--audit-2023, .chat-input-container', handleInputMouseEnter)
       $(document).on('mouseleave.zadarkTyping', '.chat-input__content__input, .chat-box-input__content__input, .chat-input-container--audit-2023, .chat-input-container', handleInputMouseLeave)
+
+      // Mark as initialized
+      this.typingDetectionInitialized = true
     },
 
     removeTypingDetection: function () {
+      if (!this.typingDetectionInitialized) {
+        return
+      }
+
       ZaDarkLogger.info('Removing typing detection')
 
       // Clear any existing timeout
@@ -1040,6 +1057,12 @@
       // Reset mouse states
       this.isMouseInMessageArea = false
       this.isMouseInInputArea = false
+
+      // Clear cached settings
+      this.typingDetectionSettings = null
+
+      // Mark as not initialized
+      this.typingDetectionInitialized = false
     },
 
     showIntroHideThreadChatMessage: function ({ onExit, onComplete } = {}) {
@@ -2057,16 +2080,10 @@
     document.addEventListener('@ZaDark:CONV_ID_CHANGE', function () {
       loadThreadChatBg()
 
-      // Re-initialize typing detection when conversation changes
-      // (this ensures input elements are available)
-      const enabledHideThreadChatMessage = ZaDarkStorage.getEnabledHideThreadChatMessage()
-      const enabledShowMessageOnTextingInput = ZaDarkStorage.getEnabledShowMessageOnTextingInput()
-      if (enabledHideThreadChatMessage && enabledShowMessageOnTextingInput) {
-        ZaDarkLogger.info('Re-initializing typing detection for new conversation')
-        setTimeout(() => {
-          ZaDarkUtils.initTypingDetection(true)
-        }, 500) // Wait for chat interface to load
-      }
+      // Note: Typing detection uses delegated events on document, so it automatically
+      // works for new conversations without re-initialization. The input selectors
+      // will match the new chat interface's input elements.
+      // No need to re-initialize here - this was causing performance issues.
     })
 
     // Note: Initial typing detection is now handled in initPageSettings()

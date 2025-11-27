@@ -3,6 +3,8 @@
   Made by Quaric
 */
 
+/* global performance */
+
 (function () {
   if (typeof require === 'function') {
     window.$ = require('zadark/libs/zadark-jquery.min.js')
@@ -416,8 +418,15 @@
           // Use requestAnimationFrame for faster, non-blocking initialization
           // Double RAF ensures DOM has been painted
           const self = this
+          const initStartTime = performance.now()
+          ZaDarkLogger.info('PERF: Starting initialization via requestAnimationFrame')
           requestAnimationFrame(function () {
+            const firstFrameTime = performance.now()
+            ZaDarkLogger.info(`PERF: First animation frame took ${(firstFrameTime - initStartTime).toFixed(2)}ms`)
             requestAnimationFrame(function () {
+              const secondFrameTime = performance.now()
+              ZaDarkLogger.info(`PERF: Second animation frame took ${(secondFrameTime - firstFrameTime).toFixed(2)}ms`)
+              ZaDarkLogger.info(`PERF: Total RAF delay: ${(secondFrameTime - initStartTime).toFixed(2)}ms`)
               self.initTypingDetection(true)
             })
           })
@@ -920,32 +929,50 @@
     isMouseInInputArea: false,
     typingDetectionInitialized: false,
     typingDetectionSettings: null, // Cache settings to avoid localStorage reads
+    hasTypedSinceInit: false, // Track if we've handled typing since initialization
 
     initTypingDetection: function (isEnabled) {
+      if (!window.perfMarks) {
+        window.perfMarks = {}
+      }
+      window.perfMarks.initTyping = { start: performance.now(), logs: [] }
+      ZaDarkLogger.info('PERF: initTypingDetection start')
+
       if (!isEnabled) {
         this.removeTypingDetection()
+        ZaDarkLogger.info('PERF: initTypingDetection aborted - disabled')
         return
       }
 
       // Prevent re-initialization if already active
       if (this.typingDetectionInitialized) {
-        ZaDarkLogger.debug('Typing detection already initialized, skipping')
+        ZaDarkLogger.info('PERF: initTypingDetection aborted - already initialized')
         return
       }
 
       const self = this
 
       // Cache settings once during initialization
+      const perfStartSettings = performance.now()
       this.typingDetectionSettings = {
         hideThreadChatMessage: ZaDarkStorage.getEnabledHideThreadChatMessage(),
         showOnTexting: ZaDarkStorage.getEnabledShowMessageOnTextingInput(),
         timeoutMs: ZaDarkStorage.getHideMessageTimeoutMs()
       }
+      const perfEndSettings = performance.now()
+      ZaDarkLogger.info(`PERF: Settings cache took ${(perfEndSettings - perfStartSettings).toFixed(2)}ms`)
 
       ZaDarkLogger.info('Initializing typing detection with timeout: ' + this.typingDetectionSettings.timeoutMs + 'ms')
 
       // Input event handler for typing detection
       const handleTyping = function (event) {
+        // Record performance for first keystroke
+        const perfStart = performance.now()
+        const isFirstKeystroke = !self.hasTypedSinceInit
+        if (isFirstKeystroke) {
+          ZaDarkLogger.info('PERF: First keystroke detection started')
+        }
+
         // Use cached settings instead of reading localStorage every time
         const settings = self.typingDetectionSettings
         if (!settings || !settings.hideThreadChatMessage || !settings.showOnTexting) return
@@ -956,8 +983,14 @@
           self.typingTimeout = null
         }
 
+        const perfClassAddStart = performance.now()
         // Add class to show both sections
         document.body.classList.add('zadark-prv--typing-active')
+        const perfClassAddEnd = performance.now()
+
+        if (isFirstKeystroke) {
+          ZaDarkLogger.info(`PERF: Adding CSS class took ${(perfClassAddEnd - perfClassAddStart).toFixed(2)}ms`)
+        }
 
         // Set new timeout only if mouse is not hovering either area
         if (!self.isMouseInMessageArea && !self.isMouseInInputArea) {
@@ -965,13 +998,25 @@
             // Immediate hide when timeout is 0
             document.body.classList.remove('zadark-prv--typing-active')
           } else {
+            const perfTimeoutStart = performance.now()
             self.typingTimeout = setTimeout(() => {
               // Only hide if mouse is still not hovering
               if (!self.isMouseInMessageArea && !self.isMouseInInputArea) {
                 document.body.classList.remove('zadark-prv--typing-active')
               }
             }, settings.timeoutMs)
+            const perfTimeoutEnd = performance.now()
+            if (isFirstKeystroke) {
+              ZaDarkLogger.info(`PERF: Setting timeout took ${(perfTimeoutEnd - perfTimeoutStart).toFixed(2)}ms`)
+            }
           }
+        }
+
+        // Record first keystroke complete and log total time
+        if (isFirstKeystroke) {
+          const perfEnd = performance.now()
+          ZaDarkLogger.info(`PERF: First keystroke handling complete, took ${(perfEnd - perfStart).toFixed(2)}ms`)
+          self.hasTypedSinceInit = true
         }
       }
 
@@ -1023,19 +1068,30 @@
       ]
 
       // Attach event listeners to all possible input elements
+      const perfStartKeyEvents = performance.now()
       inputSelectors.forEach(selector => {
         $(document).on('input.zadarkTyping keydown.zadarkTyping', selector, handleTyping)
       })
+      const perfEndKeyEvents = performance.now()
 
       ZaDarkLogger.info('Attached typing listeners to ' + inputSelectors.length + ' selectors')
+      ZaDarkLogger.info(`PERF: Key event binding took ${(perfEndKeyEvents - perfStartKeyEvents).toFixed(2)}ms`)
 
+      const perfStartMouseEvents = performance.now()
       $(document).on('mouseenter.zadarkTyping', '#messageView', handleMessageMouseEnter)
       $(document).on('mouseleave.zadarkTyping', '#messageView', handleMessageMouseLeave)
       $(document).on('mouseenter.zadarkTyping', '.chat-input__content__input, .chat-box-input__content__input, .chat-input-container--audit-2023, .chat-input-container', handleInputMouseEnter)
       $(document).on('mouseleave.zadarkTyping', '.chat-input__content__input, .chat-box-input__content__input, .chat-input-container--audit-2023, .chat-input-container', handleInputMouseLeave)
+      const perfEndMouseEvents = performance.now()
+      ZaDarkLogger.info(`PERF: Mouse event binding took ${(perfEndMouseEvents - perfStartMouseEvents).toFixed(2)}ms`)
 
       // Mark as initialized
       this.typingDetectionInitialized = true
+
+      // Record total initialization time
+      const totalTime = performance.now() - window.perfMarks.initTyping.start
+      ZaDarkLogger.info(`PERF: Total initTypingDetection time: ${totalTime.toFixed(2)}ms`)
+      delete window.perfMarks.initTyping
     },
 
     removeTypingDetection: function () {
@@ -1052,7 +1108,10 @@
       }
 
       // Remove event listeners
+      const perfStart = performance.now()
       $(document).off('.zadarkTyping')
+      const perfEnd = performance.now()
+      ZaDarkLogger.info(`PERF: Removing event listeners took ${(perfEnd - perfStart).toFixed(2)}ms`)
 
       // Remove typing active class
       document.body.classList.remove('zadark-prv--typing-active')
@@ -1063,6 +1122,9 @@
 
       // Clear cached settings
       this.typingDetectionSettings = null
+
+      // Reset typing flag
+      this.hasTypedSinceInit = false
 
       // Mark as not initialized
       this.typingDetectionInitialized = false

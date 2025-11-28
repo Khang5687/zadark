@@ -145,12 +145,12 @@
       false: 'Đã vô hiệu hoá phím tắt'
     },
     hideNotificationContent: {
-      true: 'Đã bật Ẩn Nội dung thông báo',
-      false: 'Đã tắt Ẩn Nội dung thông báo'
+      true: 'Đã bật Ẩn Nội dung thông báo\n(Liên hệ duykhang5687@gmail.com nếu gặp lỗi về tính năng này)',
+      false: 'Đã tắt Ẩn Nội dung thông báo\n(Liên hệ duykhang5687@gmail.com nếu gặp lỗi về tính năng này)'
     },
     hideNotificationSender: {
-      true: 'Đã bật Ẩn Người gửi thông báo',
-      false: 'Đã tắt Ẩn Người gửi thông báo'
+      true: 'Đã bật Ẩn Người gửi thông báo\n(Liên hệ duykhang5687@gmail.com nếu gặp lỗi về tính năng này)',
+      false: 'Đã tắt Ẩn Người gửi thông báo\n(Liên hệ duykhang5687@gmail.com nếu gặp lỗi về tính năng này)'
     }
   }
 

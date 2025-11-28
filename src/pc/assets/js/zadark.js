@@ -28,6 +28,9 @@
   const ZADARK_ENABLED_SHOW_MESSAGE_ON_TEXTING_INPUT_KEY = '@ZaDark:ENABLED_SHOW_MESSAGE_ON_TEXTING_INPUT'
   const ZADARK_HIDE_MESSAGE_TIMEOUT_MS_KEY = '@ZaDark:HIDE_MESSAGE_TIMEOUT_MS'
 
+  const ZADARK_ENABLED_HIDE_NOTIFICATION_CONTENT_KEY = '@ZaDark:ENABLED_HIDE_NOTIFICATION_CONTENT'
+  const ZADARK_ENABLED_HIDE_NOTIFICATION_SENDER_KEY = '@ZaDark:ENABLED_HIDE_NOTIFICATION_SENDER'
+
   const ZADARK_ENABLED_BLOCK_TYPING_KEY = '@ZaDark:ENABLED_BLOCK_TYPING'
   const ZADARK_ENABLED_BLOCK_DELIVERED_KEY = '@ZaDark:ENABLED_BLOCK_DELIVERED'
   const ZADARK_ENABLED_BLOCK_SEEN_KEY = '@ZaDark:ENABLED_BLOCK_SEEN'
@@ -237,6 +240,22 @@
     },
     getHideMessageTimeoutMs: () => {
       return parseInt(localStorage.getItem(ZADARK_HIDE_MESSAGE_TIMEOUT_MS_KEY) || '3000', 10)
+    },
+
+    saveEnabledHideNotificationContent: (isEnabled) => {
+      ZaDarkCookie.set(ZADARK_ENABLED_HIDE_NOTIFICATION_CONTENT_KEY, isEnabled ? 'true' : 'false')
+      return localStorage.setItem(ZADARK_ENABLED_HIDE_NOTIFICATION_CONTENT_KEY, isEnabled)
+    },
+    getEnabledHideNotificationContent: () => {
+      return localStorage.getItem(ZADARK_ENABLED_HIDE_NOTIFICATION_CONTENT_KEY) === 'true'
+    },
+
+    saveEnabledHideNotificationSender: (isEnabled) => {
+      ZaDarkCookie.set(ZADARK_ENABLED_HIDE_NOTIFICATION_SENDER_KEY, isEnabled ? 'true' : 'false')
+      return localStorage.setItem(ZADARK_ENABLED_HIDE_NOTIFICATION_SENDER_KEY, isEnabled)
+    },
+    getEnabledHideNotificationSender: () => {
+      return localStorage.getItem(ZADARK_ENABLED_HIDE_NOTIFICATION_SENDER_KEY) === 'true'
     },
 
     saveBlockSettings: (blockId, isEnabled) => {

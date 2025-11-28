@@ -17,6 +17,8 @@
   ],
   "license": "MPL-2.0",
   "scripts": {
+    "test": "vitest --run",
+    "test:watch": "vitest",
     "dev": "NODE_ENV=development gulp dev",
     "build": "NODE_ENV=development gulp build",
     "dist": "gulp dist",
@@ -37,6 +39,7 @@
     "babel-eslint": "^10.1.0",
     "chrome-webstore-upload-cli": "^3.3.2",
     "del": "^6.0.0",
+    "fast-check": "^4.3.0",
     "gulp": "^4.0.2",
     "gulp-concat": "^2.6.1",
     "gulp-crx-pack": "^1.0.3",
@@ -49,13 +52,15 @@
     "gulp-tar": "3.1.0",
     "gulp-zip": "^5.1.0",
     "husky": "^8.0.3",
+    "jsdom": "^27.2.0",
     "lint-staged": "^13.2.2",
     "merge-stream": "^2.0.0",
     "nodemon": "^2.0.15",
     "pkg": "^5.8.1",
     "resedit": "^2.0.0",
     "sass": "^1.74.1",
-    "standard": "^16.0.4"
+    "standard": "^16.0.4",
+    "vitest": "^4.0.14"
   },
   "dependencies": {
     "@electron/asar": "^3.3.1",
@@ -103,7 +108,9 @@
       "src/pc/assets/libs/**/*.js",
       "src/web/vendor/safari/ZaDark/**/*.js",
       "src/web/vendor/safari/ZaDark Extension/**/*.js",
-      "src/web/vendor/safari/ZaDark.xcodeproj/**/*.js"
+      "src/web/vendor/safari/ZaDark.xcodeproj/**/*.js",
+      "tests/**/*.js",
+      "vitest.config.js"
     ]
   },
   "engines": {

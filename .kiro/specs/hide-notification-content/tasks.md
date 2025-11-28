@@ -1,7 +1,7 @@
 # Implementation Plan
 
-- [ ] 1. Add storage layer for notification privacy settings
-  - [ ] 1.1 Add storage keys and methods to ZaDarkStorage in `src/pc/assets/js/zadark.js`
+- [x] 1. Add storage layer for notification privacy settings
+  - [x] 1.1 Add storage keys and methods to ZaDarkStorage in `src/pc/assets/js/zadark.js`
     - Add `ZADARK_ENABLED_HIDE_NOTIFICATION_CONTENT_KEY` constant
     - Add `ZADARK_ENABLED_HIDE_NOTIFICATION_SENDER_KEY` constant
     - Implement `saveEnabledHideNotificationContent()` method with cookie sync
@@ -10,11 +10,11 @@
     - Implement `getEnabledHideNotificationSender()` method
     - _Requirements: 1.4, 4.4_
 
-  - [ ] 1.2 Write property test for settings persistence round-trip
+  - [x] 1.2 Write property test for settings persistence round-trip
     - **Property 3: Settings persistence round-trip**
     - **Validates: Requirements 1.4, 4.4**
 
-  - [ ] 1.3 Write property test for settings independence
+  - [x] 1.3 Write property test for settings independence
     - **Property 4: Settings independence**
     - **Validates: Requirements 4.3**
 

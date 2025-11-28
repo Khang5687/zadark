@@ -123,34 +123,38 @@ app.whenReady().then(() => {
     }
   })
 
-  // Inject privacy classes into notification windows
-  app.on('browser-window-created', (event, window) => {
-    window.webContents.on('did-finish-load', () => {
-      const url = window.webContents.getURL()
+  // Inject privacy classes into notification windows (Windows only)
+  // macOS uses native Notification Center, handled by zadark.js interceptor
+  const isWindows = process.platform === 'win32'
 
-      // Check if this is the notification window
-      if (url.includes('znotification.html')) {
-        if (DEBUG) console.log('ZaDarkPC: Notification window detected, applying privacy settings')
+  if (isWindows) {
+    app.on('browser-window-created', (event, window) => {
+      window.webContents.on('did-finish-load', () => {
+        const url = window.webContents.getURL()
 
-        // Re-read cookies to get latest settings
-        session.fromPartition(PARTITION_NAME).cookies.get({ domain: 'zadark.com' })
-          .then((cookies = []) => {
-            let hideContent = false
-            let hideSender = false
+        // Check if this is the notification window
+        if (url.includes('znotification.html')) {
+          if (DEBUG) console.log('ZaDarkPC: Notification window detected, applying privacy settings')
 
-            cookies.forEach((cookie) => {
-              if (cookie.name === NOTIFICATION_STORAGE_KEYS.hide_content) {
-                hideContent = cookie.value === 'true'
-              }
-              if (cookie.name === NOTIFICATION_STORAGE_KEYS.hide_sender) {
-                hideSender = cookie.value === 'true'
-              }
-            })
+          // Re-read cookies to get latest settings
+          session.fromPartition(PARTITION_NAME).cookies.get({ domain: 'zadark.com' })
+            .then((cookies = []) => {
+              let hideContent = false
+              let hideSender = false
 
-            if (DEBUG) console.log('ZaDarkPC: Notification privacy - hideContent:', hideContent, 'hideSender:', hideSender)
+              cookies.forEach((cookie) => {
+                if (cookie.name === NOTIFICATION_STORAGE_KEYS.hide_content) {
+                  hideContent = cookie.value === 'true'
+                }
+                if (cookie.name === NOTIFICATION_STORAGE_KEYS.hide_sender) {
+                  hideSender = cookie.value === 'true'
+                }
+              })
 
-            // Inject JavaScript to add CSS classes
-            const script = `
+              if (DEBUG) console.log('ZaDarkPC: Notification privacy - hideContent:', hideContent, 'hideSender:', hideSender)
+
+              // Inject JavaScript to add CSS classes
+              const script = `
               (function() {
                 var zadarkEl = document.querySelector('.zadark');
                 if (zadarkEl) {
@@ -165,17 +169,18 @@ app.whenReady().then(() => {
               })();
             `
 
-            window.webContents.executeJavaScript(script)
-              .then(() => {
-                if (DEBUG) console.log('ZaDarkPC: Privacy classes injected successfully')
-              })
-              .catch((err) => {
-                if (DEBUG) console.log('ZaDarkPC: Failed to inject privacy classes', err)
-              })
-          })
-      }
+              window.webContents.executeJavaScript(script)
+                .then(() => {
+                  if (DEBUG) console.log('ZaDarkPC: Privacy classes injected successfully')
+                })
+                .catch((err) => {
+                  if (DEBUG) console.log('ZaDarkPC: Failed to inject privacy classes', err)
+                })
+            })
+        }
+      })
     })
-  })
+  }
 
   session.fromPartition(PARTITION_NAME).webRequest.onBeforeRequest(BLOCK_FILTER, (details, callback) => {
     // Typing

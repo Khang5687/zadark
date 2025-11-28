@@ -1,6 +1,10 @@
 /*
   ZaDark – Zalo Dark Mode
   Made by Quaric
+
+  Note: This file is for Windows custom notification window only.
+  macOS uses native Notification Center, which is handled by
+  the Notification interceptor in zadark.js
 */
 
 if (typeof require === 'function') {
@@ -38,11 +42,11 @@ const loadNotificationPrivacySettings = async () => {
     }
 
     // Find the privacy settings cookies
-    const hideContentCookie = cookies.find(c => c.name === ZADARK_ENABLED_HIDE_NOTIFICATION_CONTENT_KEY)
-    const hideSenderCookie = cookies.find(c => c.name === ZADARK_ENABLED_HIDE_NOTIFICATION_SENDER_KEY)
+    const hideContentCookie = cookies.find(function (c) { return c.name === ZADARK_ENABLED_HIDE_NOTIFICATION_CONTENT_KEY })
+    const hideSenderCookie = cookies.find(function (c) { return c.name === ZADARK_ENABLED_HIDE_NOTIFICATION_SENDER_KEY })
 
-    const hideContent = hideContentCookie?.value === 'true'
-    const hideSender = hideSenderCookie?.value === 'true'
+    const hideContent = hideContentCookie && hideContentCookie.value === 'true'
+    const hideSender = hideSenderCookie && hideSenderCookie.value === 'true'
 
     // Get the zadark container element
     const zadarkEl = document.querySelector('.zadark')
@@ -63,7 +67,6 @@ const loadNotificationPrivacySettings = async () => {
     }
   } catch (error) {
     // Log error but don't crash the notification window
-    // Fall back to default behavior (show content)
     console.error('ZaDark: Failed to load notification privacy settings', error)
   }
 }
@@ -72,6 +75,5 @@ const loadNotificationPrivacySettings = async () => {
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', loadNotificationPrivacySettings)
 } else {
-  // DOM is already ready
   loadNotificationPrivacySettings()
 }

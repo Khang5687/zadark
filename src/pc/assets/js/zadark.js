@@ -15,6 +15,62 @@
     window.localforage = require('zadark/libs/zadark-localforage.min.js')
   }
 
+  // ============================================================
+  // Notification Privacy Interceptor (for macOS native notifications)
+  // Must be set up early before Zalo's code creates notifications
+  // ============================================================
+  const NOTIFICATION_CONTENT_KEY = '@ZaDark:ENABLED_HIDE_NOTIFICATION_CONTENT'
+  const NOTIFICATION_SENDER_KEY = '@ZaDark:ENABLED_HIDE_NOTIFICATION_SENDER'
+  const NOTIFICATION_PLACEHOLDER = '••••••'
+
+  // Store original Notification constructor
+  const OriginalNotification = window.Notification
+
+  // Create proxy Notification constructor
+  const ZaDarkNotification = function (title, options) {
+    const hideContent = localStorage.getItem(NOTIFICATION_CONTENT_KEY) === 'true'
+    const hideSender = localStorage.getItem(NOTIFICATION_SENDER_KEY) === 'true'
+
+    // Debug logging
+    const bodyForLog = options && options.body ? options.body : undefined
+    console.log('[ZaDark] Notification intercepted:', { title: title, body: bodyForLog, hideContent: hideContent, hideSender: hideSender })
+
+    // Modify notification based on privacy settings
+    let modifiedTitle = title
+    const modifiedOptions = options ? Object.assign({}, options) : {}
+
+    if (hideSender && title) {
+      modifiedTitle = NOTIFICATION_PLACEHOLDER
+    }
+
+    if (hideContent && modifiedOptions.body) {
+      modifiedOptions.body = NOTIFICATION_PLACEHOLDER
+    }
+
+    console.log('[ZaDark] Notification modified:', { title: modifiedTitle, body: modifiedOptions.body })
+
+    // Call original Notification constructor
+    return new OriginalNotification(modifiedTitle, modifiedOptions)
+  }
+
+  // Copy static properties and methods from original Notification
+  ZaDarkNotification.permission = OriginalNotification.permission
+  if (OriginalNotification.requestPermission) {
+    ZaDarkNotification.requestPermission = OriginalNotification.requestPermission.bind(OriginalNotification)
+  }
+
+  // Define permission as a getter to always get current value
+  Object.defineProperty(ZaDarkNotification, 'permission', {
+    get: function () {
+      return OriginalNotification.permission
+    }
+  })
+
+  // Replace global Notification with our proxy
+  window.Notification = ZaDarkNotification
+
+  // ============================================================
+
   const ZADARK_THEME_KEY = '@ZaDark:THEME'
   const ZADARK_FONT_FAMILY_KEY = '@ZaDark:FONT_FAMILY'
   const ZADARK_FONT_SIZE_KEY = '@ZaDark:FONT_SIZE'

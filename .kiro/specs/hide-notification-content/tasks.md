@@ -65,14 +65,14 @@
     - Load and set initial state for notification sender toggle
     - _Requirements: 1.4, 4.4_
 
-- [ ] 5. Add keyboard shortcuts
-  - [ ] 5.1 Add hotkey bindings for notification privacy toggles
+- [x] 5. Add keyboard shortcuts
+  - [x] 5.1 Add hotkey bindings for notification privacy toggles
     - Add `command+8` and `ctrl+8` to hotkeys list
     - Implement handler to toggle hide notification content setting
     - Update switch state when hotkey is used
     - _Requirements: 5.1, 5.2, 5.3_
 
-  - [ ] 5.2 Add toast messages for hotkey actions
+  - [x] 5.2 Add toast messages for hotkey actions
     - Add `hideNotificationContent` messages to `HOTKEYS_TOAST_MESSAGE`
     - Add `hideNotificationSender` messages to `HOTKEYS_TOAST_MESSAGE`
     - _Requirements: 5.2_

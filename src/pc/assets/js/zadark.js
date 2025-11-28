@@ -1737,6 +1737,7 @@
       'command+4',
       'command+5',
       'command+6',
+      'command+8',
       'command+0',
       'command+9',
       'command+d',
@@ -1749,6 +1750,7 @@
       'ctrl+4',
       'ctrl+5',
       'ctrl+6',
+      'ctrl+8',
       'ctrl+0',
       'ctrl+9',
       'ctrl+d'
@@ -1817,6 +1819,15 @@
         case 'ctrl+6': {
           ZaDarkUtils.setSwitch(switchBlockSeenElName, !blockSettings.block_seen)
           handleBlockSettingsChange('block_seen').bind($(switchBlockSeenElName))()
+          return
+        }
+
+        // Hide notification content
+        case 'command+8':
+        case 'ctrl+8': {
+          const enabledHideNotificationContent = ZaDarkStorage.getEnabledHideNotificationContent()
+          ZaDarkUtils.setSwitch(switchHideNotificationContentElName, !enabledHideNotificationContent)
+          ZaDarkUtils.updateHideNotificationContent(!enabledHideNotificationContent)
           return
         }
 

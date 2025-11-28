@@ -25,18 +25,18 @@
     - Use existing CSS variable patterns for colors
     - _Requirements: 1.1, 4.1_
 
-- [ ] 3. Update notification window JavaScript
-  - [ ] 3.1 Enhance `src/pc/assets/js/zadark-znotification.js` to read privacy settings
+- [x] 3. Update notification window JavaScript
+  - [x] 3.1 Enhance `src/pc/assets/js/zadark-znotification.js` to read privacy settings
     - Add function to read cookies from Electron session
     - Apply CSS classes based on cookie values
     - Add error handling for cookie access failures
     - _Requirements: 1.1, 1.2, 1.3, 3.1, 3.2, 4.1, 4.2_
 
-  - [ ] 3.2 Write property test for notification content toggle behavior
+  - [x] 3.2 Write property test for notification content toggle behavior
     - **Property 1: Notification content toggle behavior**
     - **Validates: Requirements 1.1, 1.2**
 
-  - [ ] 3.3 Write property test for notification sender toggle behavior
+  - [x] 3.3 Write property test for notification sender toggle behavior
     - **Property 2: Notification sender toggle behavior**
     - **Validates: Requirements 4.1, 4.2**
 

@@ -18,8 +18,8 @@
     - **Property 4: Settings independence**
     - **Validates: Requirements 4.3**
 
-- [ ] 2. Add CSS styles for notification content hiding
-  - [ ] 2.1 Update `src/core/scss/zadark-znotification.scss` with privacy styles
+- [x] 2. Add CSS styles for notification content hiding
+  - [x] 2.1 Update `src/core/scss/zadark-znotification.scss` with privacy styles
     - Add `.zadark-prv--notification-content` class to hide `#zbody` with placeholder
     - Add `.zadark-prv--notification-sender` class to hide `#zname` with placeholder
     - Use existing CSS variable patterns for colors

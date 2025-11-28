@@ -40,27 +40,27 @@
     - **Property 2: Notification sender toggle behavior**
     - **Validates: Requirements 4.1, 4.2**
 
-- [ ] 4. Add UI toggles to settings panel
-  - [ ] 4.1 Add toggle HTML to `popupMainHTML` in `src/pc/assets/js/zadark.js`
+- [x] 4. Add UI toggles to settings panel
+  - [x] 4.1 Add toggle HTML to `popupMainHTML` in `src/pc/assets/js/zadark.js`
     - Add "Ẩn Nội dung thông báo" toggle with help tooltip
     - Add "Ẩn Người gửi thông báo" toggle with help tooltip
     - Place in privacy settings section after existing toggles
     - Add hotkey indicators (Ctrl+8/⌘8)
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-  - [ ] 4.2 Add element name constants and event handlers
+  - [x] 4.2 Add element name constants and event handlers
     - Add `switchHideNotificationContentElName` constant
     - Add `switchHideNotificationSenderElName` constant
     - Add change event handlers for both toggles
     - _Requirements: 1.1, 1.2, 4.1, 4.2_
 
-  - [ ] 4.3 Add ZaDarkUtils update methods
+  - [x] 4.3 Add ZaDarkUtils update methods
     - Implement `updateHideNotificationContent()` method
     - Implement `updateHideNotificationSender()` method
     - Add toast messages for setting changes
     - _Requirements: 1.1, 1.2, 4.1, 4.2_
 
-  - [ ] 4.4 Update `loadPopupState()` to initialize toggle states
+  - [x] 4.4 Update `loadPopupState()` to initialize toggle states
     - Load and set initial state for notification content toggle
     - Load and set initial state for notification sender toggle
     - _Requirements: 1.4, 4.4_

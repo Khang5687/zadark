@@ -86,6 +86,14 @@
     useHotkeys: {
       true: 'Đã kích hoạt phím tắt',
       false: 'Đã vô hiệu hoá phím tắt'
+    },
+    hideNotificationContent: {
+      true: 'Đã bật Ẩn Nội dung thông báo',
+      false: 'Đã tắt Ẩn Nội dung thông báo'
+    },
+    hideNotificationSender: {
+      true: 'Đã bật Ẩn Người gửi thông báo',
+      false: 'Đã tắt Ẩn Người gửi thông báo'
     }
   }
 
@@ -763,6 +771,16 @@
       })
     },
 
+    updateHideNotificationContent: function (isEnabled) {
+      ZaDarkStorage.saveEnabledHideNotificationContent(isEnabled)
+      this.showToast(HOTKEYS_TOAST_MESSAGE.hideNotificationContent[isEnabled])
+    },
+
+    updateHideNotificationSender: function (isEnabled) {
+      ZaDarkStorage.saveEnabledHideNotificationSender(isEnabled)
+      this.showToast(HOTKEYS_TOAST_MESSAGE.hideNotificationSender[isEnabled])
+    },
+
     updateUseHotkeys: function (useHotkeys) {
       ZaDarkStorage.saveUseHotkeys(useHotkeys)
       this.showToast(HOTKEYS_TOAST_MESSAGE.useHotkeys[useHotkeys])
@@ -1275,6 +1293,9 @@
   const switchBlockSeenElName = '#js-switch-block-seen'
   const switchBlockDeliveredElName = '#js-switch-block-delivered'
 
+  const switchHideNotificationContentElName = '#js-switch-hide-notification-content'
+  const switchHideNotificationSenderElName = '#js-switch-hide-notification-sender'
+
   const switchUseHotkeysElName = '#js-switch-use-hotkeys'
 
   const isSupportFeatureBlock = ZaDarkCookie.isSupport()
@@ -1596,6 +1617,31 @@
                 <span class="zadark-switch__slider"></span>
               </label>
             </div>
+
+            <div class="zadark-switch">
+              <label class="zadark-switch__label zadark-switch__label--helper" for="js-switch-hide-notification-content">
+                Ẩn <strong>Nội dung thông báo</strong>
+                <i class="zadark-icon zadark-icon--question" data-tippy-content='Nội dung tin nhắn trong thông báo sẽ được thay thế bằng ••••••'></i>
+              </label>
+              <span class="zadark-switch__hotkeys">
+                <span class="zadark-hotkeys" data-keys-win="Ctrl+8" data-keys-mac="⌘8"></span>
+              </span>
+              <label class="zadark-switch__checkbox">
+                <input class="zadark-switch__input" type="checkbox" id="js-switch-hide-notification-content">
+                <span class="zadark-switch__slider"></span>
+              </label>
+            </div>
+
+            <div class="zadark-switch">
+              <label class="zadark-switch__label zadark-switch__label--helper" for="js-switch-hide-notification-sender">
+                Ẩn <strong>Người gửi thông báo</strong>
+                <i class="zadark-icon zadark-icon--question" data-tippy-content='Tên người gửi trong thông báo sẽ được thay thế bằng ••••••'></i>
+              </label>
+              <label class="zadark-switch__checkbox">
+                <input class="zadark-switch__input" type="checkbox" id="js-switch-hide-notification-sender">
+                <span class="zadark-switch__slider"></span>
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -1848,6 +1894,12 @@
       disableFeatureBlock()
     }
 
+    const enabledHideNotificationContent = ZaDarkStorage.getEnabledHideNotificationContent()
+    ZaDarkUtils.setSwitch(switchHideNotificationContentElName, enabledHideNotificationContent)
+
+    const enabledHideNotificationSender = ZaDarkStorage.getEnabledHideNotificationSender()
+    ZaDarkUtils.setSwitch(switchHideNotificationSenderElName, enabledHideNotificationSender)
+
     const useHotkeys = ZaDarkStorage.getUseHotkeys()
     ZaDarkUtils.setSwitch(switchUseHotkeysElName, useHotkeys)
   }
@@ -2087,6 +2139,16 @@
     $(switchBlockTypingElName).on('change', handleBlockSettingsChange('block_typing'))
     $(switchBlockSeenElName).on('change', handleBlockSettingsChange('block_seen'))
     $(switchBlockDeliveredElName).on('change', handleBlockSettingsChange('block_delivered'))
+
+    $(switchHideNotificationContentElName).on('change', function () {
+      const isEnabled = $(this).is(':checked')
+      ZaDarkUtils.updateHideNotificationContent(isEnabled)
+    })
+
+    $(switchHideNotificationSenderElName).on('change', function () {
+      const isEnabled = $(this).is(':checked')
+      ZaDarkUtils.updateHideNotificationSender(isEnabled)
+    })
 
     $(switchUseHotkeysElName).on('change', function () {
       const isEnabled = $(this).is(':checked')

@@ -1,5 +1,9 @@
 # Changelog
 
+## ZaDark 26.2.1
+
+- Sửa lỗi không thể gửi ảnh từ Clipboard trên Zalo PC (macOS) [#199](https://github.com/ncdai/zadark/issues/199)
+
 ## ZaDark 26.2
 
 - Sửa lỗi ẩn tin nhắn gần nhất (bao gồm phông chữ) trên Zalo PC `26.3.20`

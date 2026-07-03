@@ -793,6 +793,9 @@ async function route (req, res) {
     if (req.method === 'POST' && url.pathname === '/v1/local-translate/delete-model') {
       const body = await readJsonBody(req)
       const variant = selectVariant(manifest, body.variantId)
+      if (installProgressFor(variant, body.storagePath)) {
+        return json(res, 409, { success: false, message: 'Model is still downloading' })
+      }
       return json(res, 200, { success: true, variant: variant.id, ...deleteVariantModel(variant, body.storagePath) })
     }
 

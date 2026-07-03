@@ -88,7 +88,8 @@ describe('local translate backend', () => {
         return
       }
 
-      if (req.url.startsWith('/api/models/slow/model/tree/main')) {
+      if (req.url.startsWith('/api/models/slow/model/tree/main') ||
+        req.url.startsWith('/api/models/mlx-community/translategemma-4b-it-4bit_immersive-translate/tree/main')) {
         const model = 'slow model'
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify([
@@ -120,7 +121,8 @@ describe('local translate backend', () => {
         return
       }
 
-      if (req.url === '/slow/model/resolve/main/model.safetensors') {
+      if (req.url === '/slow/model/resolve/main/model.safetensors' ||
+        req.url === '/mlx-community/translategemma-4b-it-4bit_immersive-translate/resolve/main/model.safetensors') {
         res.writeHead(200)
         res.write('slow ')
         releaseSlowDownload = () => res.end('model')
@@ -318,6 +320,40 @@ describe('local translate backend', () => {
       const after = backend.variantStatus(variant, tempDir)
       expect(after.installing).toBe(false)
       expect(after.installed).toBe(true)
+    } finally {
+      if (releaseSlowDownload) releaseSlowDownload()
+      if (previousEndpoint) {
+        process.env.ZADARK_HF_ENDPOINT = previousEndpoint
+      } else {
+        delete process.env.ZADARK_HF_ENDPOINT
+      }
+    }
+  })
+
+  it('does not delete a model while a snapshot download is running', async () => {
+    const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
+    process.env.ZADARK_HF_ENDPOINT = hfBaseUrl
+    releaseSlowDownload = null
+
+    try {
+      const body = {
+        variantId: 'macos-arm64-mlx-translategemma-4b-q4',
+        storagePath: path.join(tempDir, 'delete-during-install')
+      }
+
+      const installPromise = postJson(baseUrl, '/v1/local-translate/install', body)
+      for (let i = 0; i < 20 && !releaseSlowDownload; i++) await sleep(10)
+
+      const deleted = await postJson(baseUrl, '/v1/local-translate/delete-model', body)
+      expect(deleted.status).toBe(409)
+      expect(deleted.body.message).toBe('Model is still downloading')
+
+      const release = releaseSlowDownload
+      releaseSlowDownload = null
+      expect(typeof release).toBe('function')
+      release()
+      const installed = await installPromise
+      expect(installed.status).toBe(200)
     } finally {
       if (releaseSlowDownload) releaseSlowDownload()
       if (previousEndpoint) {

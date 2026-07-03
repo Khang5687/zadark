@@ -1,7 +1,15 @@
 (function ($) {
+  const getTranslateApiURL = () => {
+    if (document.body.classList.contains('zadark-pc')) {
+      return 'http://127.0.0.1:5555/v1'
+    }
+
+    return ZADARK_API_URL
+  }
+
   const translate = async (text, target) => {
     try {
-      const res = await fetch(ZADARK_API_URL + '/translate', {
+      const res = await fetch(getTranslateApiURL() + '/translate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

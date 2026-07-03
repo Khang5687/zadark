@@ -409,6 +409,13 @@ const copyZaDarkAssets = (zaloDir) => {
   const dest = path.join(zaloDir, 'app/pc-dist/zadark')
   printDebug('- copyDir:', src, '>', dest)
   fs.copySync(src, dest)
+
+  const localTranslateSrc = path.join(__dirname, './local-translate')
+  if (isDirectory(localTranslateSrc)) {
+    const localTranslateDest = path.join(dest, 'local-translate')
+    printDebug('- copyDir:', localTranslateSrc, '>', localTranslateDest)
+    fs.copySync(localTranslateSrc, localTranslateDest)
+  }
 }
 
 /**

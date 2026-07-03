@@ -6,6 +6,39 @@
 /* eslint-disable node/no-callback-literal  */
 
 const { app, session } = require('electron')
+const http = require('http')
+
+const LOCAL_TRANSLATE_PORT = 5555
+
+function startLocalTranslateBackend () {
+  let isListening = false
+  let localTranslate
+
+  try {
+    localTranslate = require('../local-translate/backend')
+    const server = http.createServer(localTranslate.route)
+
+    server.on('error', (error) => {
+      if (DEBUG) console.log('ZaDarkPC: local translate backend error', error.message)
+    })
+
+    server.listen(LOCAL_TRANSLATE_PORT, '127.0.0.1', () => {
+      isListening = true
+      if (DEBUG) console.log(`ZaDarkPC: local translate backend listening on ${LOCAL_TRANSLATE_PORT}`)
+    })
+
+    app.on('before-quit', () => {
+      if (localTranslate.stopRuntime) {
+        localTranslate.stopRuntime()
+      }
+      if (isListening) {
+        server.close()
+      }
+    })
+  } catch (error) {
+    if (DEBUG) console.log('ZaDarkPC: local translate backend unavailable', error.message)
+  }
+}
 
 const getFilterUrls = (domains = [], paths = []) => {
   return paths.reduce((prevUrls, path) => {
@@ -51,6 +84,8 @@ const BLOCK_FILTER = {
 }
 
 app.whenReady().then(() => {
+  startLocalTranslateBackend()
+
   const _blockSettings = {
     block_typing: false,
     block_delivered: false,

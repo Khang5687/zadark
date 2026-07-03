@@ -588,5 +588,6 @@ module.exports = {
   parseDfOutput,
   route,
   selectVariant,
+  stopRuntime,
   variantStatus
 }

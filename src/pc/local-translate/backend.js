@@ -140,6 +140,26 @@ function commandExists (command) {
   }
 }
 
+function runtimeStatus (variant) {
+  if (!variant.serverCommand) {
+    return { available: false, message: 'Runtime command is not configured' }
+  }
+
+  if (!commandExists(variant.serverCommand)) {
+    return { available: false, message: `Runtime command not found: ${variant.serverCommand}` }
+  }
+
+  if (variant.runtime === 'mlx') {
+    try {
+      childProcess.execFileSync(variant.serverCommand, ['-c', 'import mlx_lm.server'], { stdio: 'ignore' })
+    } catch (error) {
+      return { available: false, message: 'MLX runtime is not installed' }
+    }
+  }
+
+  return { available: true, message: '' }
+}
+
 function detectHardware () {
   const platform = os.platform()
   const arch = os.arch()
@@ -218,6 +238,7 @@ function variantStatus (variant, storagePath) {
   const modelDir = modelDirFor(variant, root)
   const estimatedBytes = variant.estimatedBytes || 0
   const isSnapshot = variant.downloadKind === 'hf-snapshot'
+  const runtime = runtimeStatus(variant)
   return {
     id: variant.id,
     runtime: variant.runtime,
@@ -231,6 +252,8 @@ function variantStatus (variant, storagePath) {
     disk: getDiskInfo(root, estimatedBytes),
     usedBytes: directorySize(modelDir),
     running: !!state.child,
+    runtimeAvailable: runtime.available,
+    runtimeMessage: runtime.message,
     idleTimeoutMs: IDLE_TIMEOUT_MS,
     lastUsedAt: state.lastUsedAt,
     lastError: state.lastError
@@ -393,13 +416,8 @@ function startRuntime (variant, storagePath) {
   if (state.child) return
   clearIdleTimer()
 
-  if (!variant.serverCommand) {
-    throw new Error(`Variant ${variant.id} does not define a runtime command`)
-  }
-
-  if (!commandExists(variant.serverCommand)) {
-    throw new Error(`Runtime command not found: ${variant.serverCommand}`)
-  }
+  const runtime = runtimeStatus(variant)
+  if (!runtime.available) throw new Error(runtime.message)
 
   const args = (variant.serverArgs || []).map((arg) => replaceArgTokens(arg, variant, storagePath))
   state.child = childProcess.spawn(variant.serverCommand, args, {
@@ -648,6 +666,7 @@ function selfCheck () {
   const manifest = loadManifest()
   assert(selectVariant(manifest, 'desktop-llamacpp-translategemma-4b-q4').id === 'desktop-llamacpp-translategemma-4b-q4')
   assert(variantStatus(selectVariant(manifest, 'macos-arm64-mlx-translategemma-4b-q4'), os.tmpdir()).downloadable)
+  assert(!runtimeStatus({ serverCommand: '__zadark_missing_runtime__' }).available)
   assert(normalizeContext(Array.from({ length: 20 }, (_, i) => `msg ${i}`)).length === 10)
   assert(buildTranslationMessages({ text: 'hello', source: 'en', target: 'vi', context: ['previous'] })[0].content.includes('previous'))
   assert(parseDfOutput('Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/disk 100 40 60 40% /tmp').freeBytes === 61440)
@@ -682,6 +701,7 @@ module.exports = {
   normalizeContext,
   parseDfOutput,
   route,
+  runtimeStatus,
   selectVariant,
   stopRuntime,
   variantStatus

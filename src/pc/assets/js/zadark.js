@@ -2099,7 +2099,10 @@
       $button.data('variant-id', selected.id)
       $button.prop('disabled', !selected.installed)
 
-      if (selected.installed) {
+      if (selected.runtimeAvailable === false) {
+        $status.text('Model dịch: runtime chưa sẵn sàng')
+        $status.attr('title', selected.runtimeMessage)
+      } else if (selected.installed) {
         $status.text(`Model dịch: đã tải ${usedText}`)
         $status.attr('title', selected.modelPath)
       } else {

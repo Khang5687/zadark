@@ -116,6 +116,14 @@ describe('local translate backend', () => {
     expect(result.body.selected.storagePath).toBe(tempDir)
     expect(result.body.selected.disk).toHaveProperty('available')
     expect(result.body.selected.estimatedBytes).toBeGreaterThan(0)
+    expect(result.body.selected).toHaveProperty('runtimeAvailable')
+  })
+
+  it('reports missing runtime commands before startup', () => {
+    const runtime = backend.runtimeStatus({ serverCommand: '__zadark_missing_runtime__' })
+
+    expect(runtime.available).toBe(false)
+    expect(runtime.message).toContain('Runtime command not found')
   })
 
   it('downloads Hugging Face snapshot variants without external tools', async () => {

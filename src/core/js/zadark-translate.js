@@ -48,7 +48,7 @@
       const modelPercent = disk.modelPercent || 0
       const modelLeft = Math.min(100, usedPercent)
       const modelWidth = Math.max(2, Math.min(100 - modelLeft, modelPercent))
-      const canDownload = selected.downloadable && disk.fits !== false
+      const canDownload = selected.runtimeAvailable !== false && selected.downloadable && disk.fits !== false
 
       const $dialog = $(`
         <div class="zadark-local-translate-dialog">
@@ -87,6 +87,8 @@
       const $error = $dialog.find('.zadark-local-translate-dialog__error')
       if (!selected.downloadable) {
         $error.text('Model AI chưa có gói tải thử nghiệm.')
+      } else if (selected.runtimeAvailable === false) {
+        $error.text('Runtime AI chưa sẵn sàng trong bản thử nghiệm này.')
       } else if (disk.fits === false) {
         $error.text('Ổ đĩa này không đủ dung lượng trống.')
       }
@@ -114,6 +116,9 @@
 
     const status = await getLocalTranslateStatus()
     if (status.selected && status.selected.installed) {
+      if (status.selected.runtimeAvailable === false) {
+        throw new Error(status.selected.runtimeMessage || 'Runtime dịch chưa sẵn sàng')
+      }
       return true
     }
 

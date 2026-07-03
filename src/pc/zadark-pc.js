@@ -9,6 +9,7 @@ const { printDebug, printError, isDirectory, isFile } = require('./utils')
 const { PLATFORM, IS_MAC, IS_WIN, OS_NAME, ZADARK_VERSION, ZADARK_TMP_PATH, ZALO_PROCESS_NAMES, ZADARK_API_DOMAIN } = require('./constants')
 
 const psList = require('./packages/ps-list')
+const LOCAL_TRANSLATE_CONNECT_SOURCES = ['http://127.0.0.1:*', 'http://localhost:*']
 
 const getVersionFromPath = (str) => {
   const match = str.match(/Zalo-(\d+\.\d+\.\d+)/)
@@ -123,10 +124,11 @@ const updateMetaContentSecurityPolicyTag = (htmlElement) => {
     contentValue = contentValue.replace(regex, '$& https://fonts.googleapis.com')
   }
 
-  if (contentValue.indexOf(ZADARK_API_DOMAIN) === -1) {
+  ;[ZADARK_API_DOMAIN, ...LOCAL_TRANSLATE_CONNECT_SOURCES].forEach((source) => {
+    if (contentValue.indexOf(source) !== -1) return
     const regexConnect = /connect-src[^;]*/
-    contentValue = contentValue.replace(regexConnect, `$& ${ZADARK_API_DOMAIN}`)
-  }
+    contentValue = contentValue.replace(regexConnect, `$& ${source}`)
+  })
 
   printDebug('- updateContentSecurityPolicy')
   metaTag.setAttribute('content', contentValue)
@@ -440,6 +442,7 @@ const installZaDark = async (zaloDir) => {
   const appAsarPath = path.join(zaloDir, 'app.asar')
   const appAsarBakPath = path.join(zaloDir, 'app.asar.bak')
   const appDirTmpPath = path.join(ZADARK_TMP_PATH, 'app')
+  const hadAppAsarFile = isFile(appAsarPath)
 
   if (!isFile(appAsarPath) && !isFile(appAsarBakPath)) {
     throw new Error(zaloDir + ' khong co tap tin "app.asar" hoac "app.asar.bak" (E002).')
@@ -455,7 +458,12 @@ const installZaDark = async (zaloDir) => {
     fs.rmSync(appAsarPath, { recursive: true })
   }
 
-  if (isFile(appAsarPath) && isFile(appAsarBakPath)) {
+  if (!fs.existsSync(appAsarPath) && isFile(appAsarBakPath)) {
+    printDebug('- copyFile:', appAsarBakPath, '>', appAsarPath)
+    fs.copyFileSync(appAsarBakPath, appAsarPath)
+  }
+
+  if (hadAppAsarFile && isFile(appAsarPath) && isFile(appAsarBakPath)) {
     printDebug('- deleteFile:', appAsarPath)
     fs.rmSync(appAsarPath, { recursive: true })
 
@@ -487,6 +495,10 @@ const installZaDark = async (zaloDir) => {
   // We do not package the "extracted app folder" into an app.asar file
   // to resolve the issue with not being able to send images from the clipboard (https://github.com/ncdai/zadark/issues/190, https://github.com/ncdai/zadark/issues/199).
   // Instead, rename the folder to app.asar so that Electron can launch it.
+  if (isFile(appAsarPath)) {
+    printDebug('- deleteFile:', appAsarPath)
+    fs.rmSync(appAsarPath)
+  }
   printDebug('- moveAppAsar:', appDirTmpPath, '>', appAsarPath)
   await fs.move(appDirTmpPath, appAsarPath)
 
@@ -522,6 +534,7 @@ const uninstallZaDark = (zaloDir) => {
 module.exports = {
   getZaloResDirList,
   getZaloProcessIds,
+  updateMetaContentSecurityPolicyTag,
 
   installZaDark,
   uninstallZaDark

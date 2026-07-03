@@ -2119,6 +2119,7 @@
   const loadLocalTranslateStatus = async () => {
     const $status = $(localTranslateStatusElName)
     const $button = $(buttonDeleteLocalTranslateModelElName)
+    const $pathInput = $(inputLocalTranslateStoragePathElName)
     stopLocalTranslateStatusPolling()
 
     try {
@@ -2126,6 +2127,7 @@
       const selected = status.selected
       const usedText = formatLocalTranslateBytes(selected.usedBytes || selected.estimatedBytes)
 
+      $pathInput.attr('title', selected.storagePath)
       $button.data('variant-id', selected.id)
       $button.prop('disabled', !selected.installed || selected.installing)
 
@@ -2147,6 +2149,7 @@
     } catch (error) {
       $status.text('Model dịch: chưa sẵn sàng')
       $status.attr('title', error.message)
+      $pathInput.attr('title', error.message)
       $button.prop('disabled', true)
     }
   }

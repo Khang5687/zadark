@@ -225,6 +225,28 @@ describe('local translate backend', () => {
     expect(fs.readFileSync(callsPath, 'utf8').trim().split(/\r?\n/)).toHaveLength(1)
   })
 
+  it('reports running only for the active variant', () => {
+    const active = {
+      id: 'active-runtime-test',
+      runtime: 'test',
+      runtimeCandidates: [process.execPath],
+      serverArgs: ['-e', 'setTimeout(function () {}, 30000)']
+    }
+    const inactive = {
+      id: 'inactive-runtime-test',
+      runtime: 'test',
+      runtimeCandidates: [process.execPath]
+    }
+
+    try {
+      backend.startRuntime(active, tempDir)
+      expect(backend.variantStatus(active, tempDir).running).toBe(true)
+      expect(backend.variantStatus(inactive, tempDir).running).toBe(false)
+    } finally {
+      backend.stopRuntime()
+    }
+  })
+
   it('caches repeated local translation responses by text, target, and context', async () => {
     const previousMock = process.env.ZADARK_LOCAL_TRANSLATE_MOCK
     process.env.ZADARK_LOCAL_TRANSLATE_MOCK = '1'

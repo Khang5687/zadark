@@ -322,6 +322,10 @@ function directorySize (targetPath) {
   }, 0)
 }
 
+function isVariantRunning (variant) {
+  return !!state.child && state.variant && state.variant.id === variant.id
+}
+
 function variantStatus (variant, storagePath) {
   const root = storageRoot(storagePath)
   const modelPath = modelPathFor(variant, root)
@@ -342,7 +346,7 @@ function variantStatus (variant, storagePath) {
     downloadable: isSnapshot || !!variant.modelUrl,
     disk: getDiskInfo(root, estimatedBytes),
     usedBytes: directorySize(modelDir),
-    running: !!state.child,
+    running: isVariantRunning(variant),
     installing: !!installProgress,
     installProgress,
     runtimeAvailable: runtime.available,
@@ -912,6 +916,7 @@ module.exports = {
   route,
   runtimeStatus,
   selectVariant,
+  startRuntime,
   stopRuntime,
   variantStatus
 }

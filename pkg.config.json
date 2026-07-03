@@ -1,6 +1,7 @@
 {
   "assets": [
     "./build/pc/assets/**/*",
+    "./build/pc/local-translate/**/*",
     "./build/pc/packages/ps-list/vendor/*"
   ]
 }

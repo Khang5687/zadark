@@ -215,6 +215,27 @@ describe('local translate backend', () => {
     }
   })
 
+  it('rejects real translation when the selected model is not installed', async () => {
+    const previousMock = process.env.ZADARK_LOCAL_TRANSLATE_MOCK
+    delete process.env.ZADARK_LOCAL_TRANSLATE_MOCK
+
+    try {
+      const result = await postJson(baseUrl, '/v1/translate', {
+        variantId: 'desktop-llamacpp-translategemma-4b-q4',
+        storagePath: tempDir,
+        text: 'hello',
+        target: 'vi'
+      })
+
+      expect(result.status).toBe(500)
+      expect(result.body.message).toBe('Model is not installed')
+    } finally {
+      if (previousMock) {
+        process.env.ZADARK_LOCAL_TRANSLATE_MOCK = previousMock
+      }
+    }
+  })
+
   it('downloads Hugging Face snapshot variants without external tools', async () => {
     const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
     process.env.ZADARK_HF_ENDPOINT = hfBaseUrl

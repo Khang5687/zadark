@@ -684,6 +684,11 @@ async function translate (body) {
   }
 
   const root = storageRoot(body.storagePath)
+  const status = variantStatus(variant, root)
+  if (!status.installed) {
+    throw new Error(status.installing ? 'Model is still downloading' : 'Model is not installed')
+  }
+
   startRuntime(variant, root)
 
   const upstream = process.env.ZADARK_LOCAL_TRANSLATE_UPSTREAM || runtimeBaseUrl(variant, root)

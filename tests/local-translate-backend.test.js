@@ -126,6 +126,14 @@ describe('local translate backend', () => {
     expect(runtime.message).toContain('Runtime command not found')
   })
 
+  it('resolves bundled runtime candidates before path fallbacks', () => {
+    const runtime = backend.resolveRuntimeCommand({
+      runtimeCandidates: ['__zadark_missing_runtime__', process.execPath]
+    })
+
+    expect(runtime).toBe(process.execPath)
+  })
+
   it('downloads Hugging Face snapshot variants without external tools', async () => {
     const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
     process.env.ZADARK_HF_ENDPOINT = hfBaseUrl

@@ -52,7 +52,10 @@
       const modelPercent = disk.modelPercent || 0
       const modelLeft = Math.min(100, usedPercent)
       const modelWidth = Math.max(2, Math.min(100 - modelLeft, modelPercent))
-      const canDownload = selected.runtimeAvailable !== false && selected.downloadable && disk.fits !== false
+      const isInstalling = !!selected.installing
+      const installProgress = selected.installProgress || {}
+      const canDownload = !isInstalling && selected.runtimeAvailable !== false && selected.downloadable && disk.fits !== false
+      const installButtonText = isInstalling ? `Đang tải ${installProgress.percent || 0}%` : 'Tải model AI'
 
       const $dialog = $(`
         <div class="zadark-local-translate-dialog">
@@ -77,15 +80,36 @@
             <div class="zadark-local-translate-dialog__error"></div>
             <div class="zadark-local-translate-dialog__actions">
               <button type="button" class="zadark-local-translate-dialog__button" data-action="cancel">Huỷ</button>
-              <button type="button" class="zadark-local-translate-dialog__button zadark-local-translate-dialog__button--primary" data-action="install" ${canDownload ? '' : 'disabled'}>Tải model AI</button>
+              <button type="button" class="zadark-local-translate-dialog__button zadark-local-translate-dialog__button--primary" data-action="install" ${canDownload ? '' : 'disabled'}>${installButtonText}</button>
             </div>
           </div>
         </div>
       `)
 
+      let pollTimer = null
       const finish = (value) => {
+        if (pollTimer) clearInterval(pollTimer)
         $dialog.remove()
         resolve(value)
+      }
+
+      const pollInstallProgress = ($button) => {
+        pollTimer = setInterval(async () => {
+          try {
+            const status = await getLocalTranslateStatus()
+            if (status.selected && status.selected.installed) {
+              finish(true)
+              return
+            }
+
+            const progress = status.selected && status.selected.installProgress
+            if (progress && progress.percent) {
+              $button.text(`Đang tải ${progress.percent}%`)
+            }
+          } catch (error) {
+            $error.text(error.message)
+          }
+        }, 1000)
       }
 
       const $error = $dialog.find('.zadark-local-translate-dialog__error')
@@ -101,17 +125,22 @@
       $dialog.on('click', '[data-action="install"]', async function () {
         const $button = $(this)
         $button.prop('disabled', true).text('Đang tải...')
+        $dialog.find('[data-action="cancel"]').prop('disabled', true)
         $error.text('')
+        pollInstallProgress($button)
         try {
           await installLocalTranslateModel(selected.id)
           finish(true)
         } catch (error) {
+          if (pollTimer) clearInterval(pollTimer)
           $button.prop('disabled', false).text('Tải model AI')
+          $dialog.find('[data-action="cancel"]').prop('disabled', false)
           $error.text(error.message)
         }
       })
 
       $('body').append($dialog)
+      if (isInstalling) pollInstallProgress($dialog.find('[data-action="install"]'))
     })
   }
 

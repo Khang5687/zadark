@@ -29,6 +29,7 @@ const state = {
   lastUsedAt: null,
   idleTimer: null
 }
+const installs = new Map()
 const translationCache = new Map()
 
 function json (res, status, body) {
@@ -243,6 +244,15 @@ function snapshotMarkerFor (variant, storagePath) {
   return path.join(modelDirFor(variant, storagePath), '.snapshot-complete.json')
 }
 
+function installKey (variant, storagePath) {
+  return `${variant.id}:${storageRoot(storagePath)}`
+}
+
+function installProgressFor (variant, storagePath) {
+  const install = installs.get(installKey(variant, storagePath))
+  return install ? install.progress : null
+}
+
 function directorySize (targetPath) {
   if (!fs.existsSync(targetPath)) return 0
   const stat = fs.statSync(targetPath)
@@ -260,6 +270,7 @@ function variantStatus (variant, storagePath) {
   const estimatedBytes = variant.estimatedBytes || 0
   const isSnapshot = variant.downloadKind === 'hf-snapshot'
   const runtime = runtimeStatus(variant)
+  const installProgress = installProgressFor(variant, root)
   return {
     id: variant.id,
     runtime: variant.runtime,
@@ -273,6 +284,8 @@ function variantStatus (variant, storagePath) {
     disk: getDiskInfo(root, estimatedBytes),
     usedBytes: directorySize(modelDir),
     running: !!state.child,
+    installing: !!installProgress,
+    installProgress,
     runtimeAvailable: runtime.available,
     runtimeCommand: runtime.command || '',
     runtimeMessage: runtime.message,
@@ -324,7 +337,7 @@ function getJson (url) {
   })
 }
 
-function downloadFile (url, destPath, expectedSha256) {
+function downloadFile (url, destPath, expectedSha256, onProgress) {
   return new Promise((resolve, reject) => {
     fs.mkdirSync(path.dirname(destPath), { recursive: true })
     const tmpPath = destPath + '.download'
@@ -336,7 +349,7 @@ function downloadFile (url, destPath, expectedSha256) {
       if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
         file.close()
         fs.rmSync(tmpPath, { force: true })
-        downloadFile(new URL(response.headers.location, url).toString(), destPath, expectedSha256).then(resolve, reject)
+        downloadFile(new URL(response.headers.location, url).toString(), destPath, expectedSha256, onProgress).then(resolve, reject)
         return
       }
 
@@ -347,7 +360,10 @@ function downloadFile (url, destPath, expectedSha256) {
         return
       }
 
-      response.on('data', (chunk) => hash.update(chunk))
+      response.on('data', (chunk) => {
+        hash.update(chunk)
+        if (onProgress) onProgress(chunk.length)
+      })
       response.pipe(file)
       file.on('finish', () => {
         file.close(() => {
@@ -369,7 +385,7 @@ function downloadFile (url, destPath, expectedSha256) {
   })
 }
 
-async function downloadHuggingFaceSnapshot (variant, storagePath) {
+async function downloadHuggingFaceSnapshot (variant, storagePath, onProgress) {
   const modelDir = modelDirFor(variant, storagePath)
   const markerPath = snapshotMarkerFor(variant, storagePath)
   if (fs.existsSync(markerPath)) return { path: modelDir, alreadyInstalled: true }
@@ -380,11 +396,12 @@ async function downloadHuggingFaceSnapshot (variant, storagePath) {
   const files = await getJson(hfApiTreeUrl(variant.modelRef, revision))
   if (!Array.isArray(files)) throw new Error('Hugging Face tree response was not a file list')
 
+  const modelFiles = files.filter((file) => file && file.type === 'file' && file.path)
+  const totalBytes = modelFiles.reduce((total, file) => total + (file.size || 0), 0)
   fs.mkdirSync(modelDir, { recursive: true })
   let bytes = 0
-  for (const file of files) {
-    if (!file || file.type !== 'file' || !file.path) continue
-
+  if (onProgress) onProgress(0, totalBytes, '')
+  for (const file of modelFiles) {
     const destPath = path.resolve(modelDir, file.path)
     if (!destPath.startsWith(path.resolve(modelDir) + path.sep)) {
       throw new Error(`Refusing unsafe model path: ${file.path}`)
@@ -393,25 +410,28 @@ async function downloadHuggingFaceSnapshot (variant, storagePath) {
     await downloadFile(
       hfResolveUrl(variant.modelRef, revision, file.path),
       destPath,
-      file.lfs && file.lfs.oid
+      file.lfs && file.lfs.oid,
+      (chunkBytes) => {
+        bytes += chunkBytes
+        if (onProgress) onProgress(bytes, totalBytes, file.path)
+      }
     )
-    bytes += file.size || 0
   }
 
   fs.writeFileSync(markerPath, JSON.stringify({
     modelRef: variant.modelRef,
     revision,
-    files: files.length,
+    files: modelFiles.length,
     bytes,
     installedAt: new Date().toISOString()
   }, null, 2))
 
-  return { path: modelDir, files: files.length, bytes }
+  return { path: modelDir, files: modelFiles.length, bytes }
 }
 
-async function installVariant (variant, storagePath) {
+async function runInstallVariant (variant, storagePath, onProgress) {
   if (variant.downloadKind === 'hf-snapshot') {
-    return downloadHuggingFaceSnapshot(variant, storagePath)
+    return downloadHuggingFaceSnapshot(variant, storagePath, onProgress)
   }
 
   if (!variant.modelUrl) {
@@ -420,7 +440,39 @@ async function installVariant (variant, storagePath) {
 
   const modelPath = modelPathFor(variant, storagePath)
   if (fs.existsSync(modelPath)) return { path: modelPath, alreadyInstalled: true }
-  return downloadFile(variant.modelUrl, modelPath, variant.sha256)
+  let bytes = 0
+  if (onProgress) onProgress(0, variant.estimatedBytes || 0, path.basename(modelPath))
+  return downloadFile(variant.modelUrl, modelPath, variant.sha256, (chunkBytes) => {
+    bytes += chunkBytes
+    if (onProgress) onProgress(bytes, variant.estimatedBytes || 0, path.basename(modelPath))
+  })
+}
+
+async function installVariant (variant, storagePath) {
+  const root = storageRoot(storagePath)
+  const key = installKey(variant, root)
+  const existing = installs.get(key)
+  if (existing) return existing.promise
+
+  const progress = {
+    running: true,
+    downloadedBytes: 0,
+    totalBytes: variant.estimatedBytes || 0,
+    percent: 0,
+    file: ''
+  }
+
+  const promise = runInstallVariant(variant, root, (downloadedBytes, totalBytes, file) => {
+    progress.downloadedBytes = downloadedBytes
+    progress.totalBytes = totalBytes || progress.totalBytes
+    progress.percent = progress.totalBytes ? Number(((progress.downloadedBytes / progress.totalBytes) * 100).toFixed(1)) : 0
+    progress.file = file || progress.file
+  }).finally(() => {
+    installs.delete(key)
+  })
+
+  installs.set(key, { progress, promise })
+  return promise
 }
 
 function replaceArgTokens (value, variant, storagePath) {

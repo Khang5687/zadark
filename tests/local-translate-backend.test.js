@@ -48,12 +48,17 @@ function postJson (baseUrl, pathname, body) {
   })
 }
 
+function sleep (ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 describe('local translate backend', () => {
   let server
   let baseUrl
   let tempDir
   let hfServer
   let hfBaseUrl
+  let releaseSlowDownload
 
   beforeAll(async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zadark-local-translate-'))
@@ -83,6 +88,20 @@ describe('local translate backend', () => {
         return
       }
 
+      if (req.url.startsWith('/api/models/slow/model/tree/main')) {
+        const model = 'slow model'
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify([
+          {
+            type: 'file',
+            path: 'model.safetensors',
+            size: Buffer.byteLength(model),
+            lfs: { oid: crypto.createHash('sha256').update(model).digest('hex') }
+          }
+        ]))
+        return
+      }
+
       if (req.url === '/test/model/resolve/main/config.json') {
         res.writeHead(307, { Location: '/resolve-cache/config.json' })
         res.end()
@@ -98,6 +117,13 @@ describe('local translate backend', () => {
       if (req.url === '/test/model/resolve/main/model.safetensors') {
         res.writeHead(200)
         res.end('tiny model')
+        return
+      }
+
+      if (req.url === '/slow/model/resolve/main/model.safetensors') {
+        res.writeHead(200)
+        res.write('slow ')
+        releaseSlowDownload = () => res.end('model')
         return
       }
 
@@ -217,6 +243,48 @@ describe('local translate backend', () => {
       const second = await backend.installVariant(variant, tempDir)
       expect(second.alreadyInstalled).toBe(true)
     } finally {
+      if (previousEndpoint) {
+        process.env.ZADARK_HF_ENDPOINT = previousEndpoint
+      } else {
+        delete process.env.ZADARK_HF_ENDPOINT
+      }
+    }
+  })
+
+  it('reports install progress while a snapshot download is running', async () => {
+    const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
+    process.env.ZADARK_HF_ENDPOINT = hfBaseUrl
+    releaseSlowDownload = null
+
+    try {
+      const variant = {
+        id: 'slow-hf-snapshot',
+        runtime: 'mlx',
+        modelRef: 'slow/model',
+        downloadKind: 'hf-snapshot',
+        revision: 'main',
+        estimatedBytes: 10
+      }
+
+      const installPromise = backend.installVariant(variant, tempDir)
+      for (let i = 0; i < 20 && !releaseSlowDownload; i++) await sleep(10)
+
+      const during = backend.variantStatus(variant, tempDir)
+      expect(during.installing).toBe(true)
+      expect(during.installProgress.downloadedBytes).toBe(5)
+      expect(during.installProgress.totalBytes).toBe(10)
+
+      const release = releaseSlowDownload
+      releaseSlowDownload = null
+      expect(typeof release).toBe('function')
+      release()
+      await installPromise
+
+      const after = backend.variantStatus(variant, tempDir)
+      expect(after.installing).toBe(false)
+      expect(after.installed).toBe(true)
+    } finally {
+      if (releaseSlowDownload) releaseSlowDownload()
       if (previousEndpoint) {
         process.env.ZADARK_HF_ENDPOINT = previousEndpoint
       } else {

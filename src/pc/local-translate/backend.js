@@ -244,6 +244,23 @@ function snapshotMarkerFor (variant, storagePath) {
   return path.join(modelDirFor(variant, storagePath), '.snapshot-complete.json')
 }
 
+function snapshotInstalled (variant, storagePath) {
+  const modelDir = modelDirFor(variant, storagePath)
+  const markerPath = snapshotMarkerFor(variant, storagePath)
+  if (!fs.existsSync(markerPath)) return false
+
+  try {
+    const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'))
+    if (Array.isArray(marker.filePaths) && marker.filePaths.length) {
+      return marker.filePaths.every((filePath) => fs.existsSync(path.join(modelDir, filePath)))
+    }
+  } catch (error) {
+    return false
+  }
+
+  return fs.readdirSync(modelDir).some((name) => name !== path.basename(markerPath))
+}
+
 function installKey (variant, storagePath) {
   return `${variant.id}:${storageRoot(storagePath)}`
 }
@@ -279,7 +296,7 @@ function variantStatus (variant, storagePath) {
     estimatedBytes,
     storagePath: root,
     modelPath,
-    installed: isSnapshot ? fs.existsSync(snapshotMarkerFor(variant, root)) : !!variant.modelUrl && fs.existsSync(modelPath),
+    installed: isSnapshot ? snapshotInstalled(variant, root) : !!variant.modelUrl && fs.existsSync(modelPath),
     downloadable: isSnapshot || !!variant.modelUrl,
     disk: getDiskInfo(root, estimatedBytes),
     usedBytes: directorySize(modelDir),
@@ -388,7 +405,7 @@ function downloadFile (url, destPath, expectedSha256, onProgress) {
 async function downloadHuggingFaceSnapshot (variant, storagePath, onProgress) {
   const modelDir = modelDirFor(variant, storagePath)
   const markerPath = snapshotMarkerFor(variant, storagePath)
-  if (fs.existsSync(markerPath)) return { path: modelDir, alreadyInstalled: true }
+  if (snapshotInstalled(variant, storagePath)) return { path: modelDir, alreadyInstalled: true }
 
   if (!variant.modelRef) throw new Error(`Variant ${variant.id} has no Hugging Face modelRef`)
 
@@ -422,6 +439,7 @@ async function downloadHuggingFaceSnapshot (variant, storagePath, onProgress) {
     modelRef: variant.modelRef,
     revision,
     files: modelFiles.length,
+    filePaths: modelFiles.map((file) => file.path),
     bytes,
     installedAt: new Date().toISOString()
   }, null, 2))

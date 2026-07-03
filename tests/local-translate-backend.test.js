@@ -273,6 +273,10 @@ describe('local translate backend', () => {
 
       const second = await backend.installVariant(variant, tempDir)
       expect(second.alreadyInstalled).toBe(true)
+
+      fs.rmSync(path.join(installed.path, 'model.safetensors'))
+      const afterManualDelete = backend.variantStatus(variant, tempDir)
+      expect(afterManualDelete.installed).toBe(false)
     } finally {
       if (previousEndpoint) {
         process.env.ZADARK_HF_ENDPOINT = previousEndpoint

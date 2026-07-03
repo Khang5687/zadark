@@ -69,7 +69,9 @@
       const modelWidth = Math.max(2, Math.min(100 - modelLeft, modelPercent))
       const isInstalling = !!selected.installing
       const installProgress = selected.installProgress || {}
-      const canDownload = !isInstalling && selected.runtimeAvailable !== false && selected.downloadable && disk.fits !== false
+      const downloadBytes = selected.downloadEstimatedBytes || selected.estimatedBytes
+      const runtimeCanInstall = selected.runtimeAvailable !== false || selected.runtimeDownloadable
+      const canDownload = !isInstalling && runtimeCanInstall && selected.downloadable && disk.fits !== false
       const installButtonText = isInstalling ? `Đang tải ${installProgress.percent || 0}%` : 'Tải model AI'
 
       const $dialog = $(`
@@ -80,7 +82,7 @@
               Dịch tin nhắn miễn phí và riêng tư. Model AI sẽ chạy trực tiếp trên máy tính của bạn.
             </div>
             <div class="zadark-local-translate-dialog__text">
-              ZaDark cần tải khoảng <strong>${formatBytes(selected.estimatedBytes)}</strong> dữ liệu AI. Ổ đĩa này sẽ dùng thêm khoảng <strong>${modelPercent}%</strong> dung lượng.
+              ZaDark cần tải khoảng <strong>${formatBytes(downloadBytes)}</strong> dữ liệu AI. Ổ đĩa này sẽ dùng thêm khoảng <strong>${modelPercent}%</strong> dung lượng.
             </div>
             <div class="zadark-local-translate-dialog__disk">
               <div class="zadark-local-translate-dialog__bar">
@@ -89,7 +91,7 @@
               </div>
               <div class="zadark-local-translate-dialog__disk-meta">
                 <span>Còn trống: ${formatBytes(freeBytes)}</span>
-                <span>Model AI: ${formatBytes(selected.estimatedBytes)}</span>
+                <span>Dữ liệu AI: ${formatBytes(downloadBytes)}</span>
               </div>
             </div>
             <div class="zadark-local-translate-dialog__error"></div>
@@ -112,7 +114,7 @@
         pollTimer = setInterval(async () => {
           try {
             const status = await getLocalTranslateStatus()
-            if (status.selected && status.selected.installed) {
+            if (status.selected && status.selected.installed && status.selected.runtimeAvailable !== false) {
               finish(true)
               return
             }
@@ -130,7 +132,7 @@
       const $error = $dialog.find('.zadark-local-translate-dialog__error')
       if (!selected.downloadable) {
         $error.text('Model AI chưa có gói tải thử nghiệm.')
-      } else if (selected.runtimeAvailable === false) {
+      } else if (!runtimeCanInstall) {
         $error.text('Runtime AI chưa sẵn sàng trong bản thử nghiệm này.')
       } else if (disk.fits === false) {
         $error.text('Ổ đĩa này không đủ dung lượng trống.')
@@ -165,6 +167,7 @@
     const status = await getLocalTranslateStatus()
     if (status.selected && status.selected.installed) {
       if (status.selected.runtimeAvailable === false) {
+        if (status.selected.runtimeDownloadable) return showLocalTranslateSetup(status)
         throw new Error(status.selected.runtimeMessage || 'Runtime dịch chưa sẵn sàng')
       }
       return true

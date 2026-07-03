@@ -172,6 +172,15 @@ function replaceRuntimeTokens (value) {
   return String(value).replace(/\{runtimeDir\}/g, RUNTIME_DIR)
 }
 
+function runtimeArtifactPathFor (variant) {
+  if (variant.runtimePath) return path.resolve(RUNTIME_DIR, variant.runtimePath)
+
+  const candidates = variant.runtimeCandidates || []
+  return candidates
+    .map(replaceRuntimeTokens)
+    .find((candidate) => candidate.includes('/') || candidate.includes('\\')) || ''
+}
+
 function resolveRuntimeCommand (variant) {
   const candidates = (variant.runtimeCandidates && variant.runtimeCandidates.length)
     ? variant.runtimeCandidates
@@ -335,6 +344,8 @@ function variantStatus (variant, storagePath) {
   const modelPath = modelPathFor(variant, root)
   const modelDir = modelDirFor(variant, root)
   const estimatedBytes = variant.estimatedBytes || 0
+  const runtimeEstimatedBytes = variant.runtimeEstimatedBytes || 0
+  const downloadEstimatedBytes = estimatedBytes + runtimeEstimatedBytes
   const isSnapshot = variant.downloadKind === 'hf-snapshot'
   const runtime = runtimeStatus(variant)
   const installProgress = installProgressFor(variant, root)
@@ -344,11 +355,14 @@ function variantStatus (variant, storagePath) {
     model: variant.model,
     modelRef: variant.modelRef,
     estimatedBytes,
+    runtimeEstimatedBytes,
+    downloadEstimatedBytes,
     storagePath: root,
     modelPath,
     installed: isSnapshot ? snapshotInstalled(variant, root) : !!variant.modelUrl && fs.existsSync(modelPath),
     downloadable: isSnapshot || !!variant.modelUrl,
-    disk: getDiskInfo(root, estimatedBytes),
+    runtimeDownloadable: !!variant.runtimeUrl && !!runtimeArtifactPathFor(variant),
+    disk: getDiskInfo(root, downloadEstimatedBytes),
     usedBytes: directorySize(modelDir),
     running: isVariantRunning(variant, root),
     installing: !!installProgress,
@@ -535,13 +549,32 @@ async function runInstallVariant (variant, storagePath, onProgress) {
   })
 }
 
+async function installRuntimeVariant (variant, onProgress) {
+  if (!variant.runtimeUrl) return null
+  const runtime = runtimeStatus(variant)
+  if (runtime.available) return { path: runtime.command, alreadyInstalled: true }
+
+  const runtimePath = runtimeArtifactPathFor(variant)
+  if (!runtimePath) throw new Error(`Variant ${variant.id} has no bundled runtime path`)
+
+  let bytes = 0
+  if (onProgress) onProgress(0, variant.runtimeEstimatedBytes || 0, path.basename(runtimePath))
+  const result = await downloadFile(variant.runtimeUrl, runtimePath, variant.runtimeSha256, (chunkBytes) => {
+    bytes += chunkBytes
+    if (onProgress) onProgress(bytes, variant.runtimeEstimatedBytes || 0, path.basename(runtimePath))
+  })
+  if (os.platform() !== 'win32') fs.chmodSync(runtimePath, 0o755)
+  runtimeStatusCache.delete(runtimeStatusCacheKey(variant))
+  return { ...result, bytes }
+}
+
 async function installVariant (variant, storagePath) {
   const root = storageRoot(storagePath)
   const key = installKey(variant, root)
   const existing = installs.get(key)
   if (existing) return existing.promise
 
-  const disk = getDiskInfo(root, variant.estimatedBytes || 0)
+  const disk = getDiskInfo(root, (variant.estimatedBytes || 0) + (variant.runtimeEstimatedBytes || 0))
   if (disk.available && disk.fits === false) {
     throw new Error('Not enough disk space for model')
   }
@@ -553,12 +586,18 @@ async function installVariant (variant, storagePath) {
     percent: 0,
     file: ''
   }
+  let previousBytes = 0
 
-  const promise = runInstallVariant(variant, root, (downloadedBytes, totalBytes, file) => {
-    progress.downloadedBytes = downloadedBytes
-    progress.totalBytes = totalBytes || progress.totalBytes
+  const updateProgress = (downloadedBytes, totalBytes, file) => {
+    progress.downloadedBytes = previousBytes + downloadedBytes
+    progress.totalBytes = (variant.runtimeEstimatedBytes || 0) + (variant.estimatedBytes || 0) || totalBytes || progress.totalBytes
     progress.percent = progress.totalBytes ? Number(((progress.downloadedBytes / progress.totalBytes) * 100).toFixed(1)) : 0
     progress.file = file || progress.file
+  }
+
+  const promise = installRuntimeVariant(variant, updateProgress).then((runtimeResult) => {
+    previousBytes = runtimeResult ? variant.runtimeEstimatedBytes || runtimeResult.bytes || previousBytes : 0
+    return runInstallVariant(variant, root, updateProgress)
   }).finally(() => {
     installs.delete(key)
   })

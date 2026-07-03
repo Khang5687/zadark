@@ -123,6 +123,12 @@ describe('local translate backend', () => {
         return
       }
 
+      if (req.url === '/runtime/fake-server') {
+        res.writeHead(200)
+        res.end('#!/bin/sh\nexit 0\n')
+        return
+      }
+
       if (req.url === '/test/model/resolve/main/model.safetensors') {
         testModelDownloadCount += 1
         res.writeHead(200)
@@ -371,6 +377,46 @@ describe('local translate backend', () => {
       fs.rmSync(path.join(installed.path, 'model.safetensors'))
       const afterManualDelete = backend.variantStatus(variant, tempDir)
       expect(afterManualDelete.installed).toBe(false)
+    } finally {
+      if (previousEndpoint) {
+        process.env.ZADARK_HF_ENDPOINT = previousEndpoint
+      } else {
+        delete process.env.ZADARK_HF_ENDPOINT
+      }
+    }
+  })
+
+  it('downloads a declared runtime artifact before the model', async () => {
+    const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
+    process.env.ZADARK_HF_ENDPOINT = hfBaseUrl
+
+    try {
+      const runtimePath = path.join(tempDir, 'runtime-bin', 'fake-server')
+      const variant = {
+        id: 'runtime-download-test',
+        runtime: 'test',
+        runtimeCandidates: [runtimePath],
+        runtimeUrl: `${hfBaseUrl}/runtime/fake-server`,
+        runtimeSha256: crypto.createHash('sha256').update('#!/bin/sh\nexit 0\n').digest('hex'),
+        runtimeEstimatedBytes: Buffer.byteLength('#!/bin/sh\nexit 0\n'),
+        modelRef: 'test/model',
+        downloadKind: 'hf-snapshot',
+        revision: 'main',
+        estimatedBytes: 10
+      }
+
+      const before = backend.variantStatus(variant, tempDir)
+      expect(before.runtimeAvailable).toBe(false)
+      expect(before.runtimeDownloadable).toBe(true)
+      expect(before.downloadEstimatedBytes).toBe(27)
+
+      await backend.installVariant(variant, tempDir)
+
+      expect(fs.readFileSync(runtimePath, 'utf8')).toBe('#!/bin/sh\nexit 0\n')
+      expect(backend.runtimeStatus(variant).available).toBe(true)
+      if (os.platform() !== 'win32') {
+        expect(fs.statSync(runtimePath).mode & 0o111).not.toBe(0)
+      }
     } finally {
       if (previousEndpoint) {
         process.env.ZADARK_HF_ENDPOINT = previousEndpoint

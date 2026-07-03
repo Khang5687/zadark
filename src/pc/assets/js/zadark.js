@@ -2143,7 +2143,7 @@
         $status.text(`Model dịch: đã tải ${usedText}`)
         $status.attr('title', selected.modelPath)
       } else {
-        $status.text(`Model dịch: chưa tải (${formatLocalTranslateBytes(selected.estimatedBytes)})`)
+        $status.text(`Model dịch: chưa tải (${formatLocalTranslateBytes(selected.downloadEstimatedBytes || selected.estimatedBytes)})`)
         $status.attr('title', selected.storagePath)
       }
     } catch (error) {

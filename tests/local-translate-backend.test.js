@@ -6,9 +6,9 @@ const path = require('path')
 
 const backend = require('../src/pc/local-translate/backend')
 
-function requestJson (baseUrl, pathname) {
+function requestJson (baseUrl, pathname, headers = {}) {
   return new Promise((resolve, reject) => {
-    http.get(baseUrl + pathname, (res) => {
+    http.get(baseUrl + pathname, { headers }, (res) => {
       let raw = ''
       res.on('data', (chunk) => { raw += chunk })
       res.on('end', () => {
@@ -171,6 +171,15 @@ describe('local translate backend', () => {
     expect(result.body.selected.disk).toHaveProperty('available')
     expect(result.body.selected.estimatedBytes).toBeGreaterThan(0)
     expect(result.body.selected).toHaveProperty('runtimeAvailable')
+  })
+
+  it('rejects browser requests from unknown origins', async () => {
+    const result = await requestJson(baseUrl, '/v1/local-translate/status', {
+      Origin: 'https://example.com'
+    })
+
+    expect(result.status).toBe(403)
+    expect(result.body.message).toBe('Origin is not allowed')
   })
 
   it('reports missing runtime commands before startup', () => {

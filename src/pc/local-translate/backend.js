@@ -34,13 +34,29 @@ const installs = new Map()
 const translationCache = new Map()
 const runtimeStatusCache = new Map()
 
-function json (res, status, body) {
-  res.writeHead(status, {
+function isAllowedOrigin (origin) {
+  if (!origin || origin === 'null' || origin.startsWith('file://')) return true
+
+  try {
+    const parsed = new URL(origin)
+    return ['127.0.0.1', 'localhost', '::1'].includes(parsed.hostname)
+  } catch (error) {
+    return false
+  }
+}
+
+function corsHeaders (req) {
+  const origin = req.headers.origin
+  return {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
+    ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}),
     'Access-Control-Allow-Headers': 'content-type',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
-  })
+  }
+}
+
+function json (req, res, status, body) {
+  res.writeHead(status, corsHeaders(req))
   res.end(JSON.stringify(body))
 }
 
@@ -772,20 +788,24 @@ async function translate (body) {
 }
 
 async function route (req, res) {
-  if (req.method === 'OPTIONS') return json(res, 204, {})
+  if (!isAllowedOrigin(req.headers.origin)) {
+    return json(req, res, 403, { success: false, message: 'Origin is not allowed' })
+  }
+
+  if (req.method === 'OPTIONS') return json(req, res, 204, {})
 
   try {
     const manifest = loadManifest()
     const url = new URL(req.url, `http://${req.headers.host || '127.0.0.1'}`)
 
     if (req.method === 'GET' && url.pathname === '/health') {
-      return json(res, 200, { ok: true })
+      return json(req, res, 200, { ok: true })
     }
 
     if (req.method === 'GET' && url.pathname === '/v1/local-translate/status') {
       const storagePath = url.searchParams.get('storagePath') || DEFAULT_STORAGE_DIR
       const variant = state.variant || selectVariant(manifest, url.searchParams.get('variantId'))
-      return json(res, 200, {
+      return json(req, res, 200, {
         hardware: detectHardware(),
         selected: variantStatus(variant, storagePath),
         variants: manifest.variants.map((variant) => variantStatus(variant, storagePath))
@@ -796,38 +816,38 @@ async function route (req, res) {
       const body = await readJsonBody(req)
       const variant = selectVariant(manifest, body.variantId)
       const result = await installVariant(variant, body.storagePath)
-      return json(res, 200, { success: true, variant: variant.id, ...result })
+      return json(req, res, 200, { success: true, variant: variant.id, ...result })
     }
 
     if (req.method === 'POST' && url.pathname === '/v1/local-translate/start') {
       const body = await readJsonBody(req)
       const variant = selectVariant(manifest, body.variantId)
       startRuntime(variant, body.storagePath)
-      return json(res, 200, { success: true, variant: variant.id })
+      return json(req, res, 200, { success: true, variant: variant.id })
     }
 
     if (req.method === 'POST' && url.pathname === '/v1/local-translate/stop') {
       stopRuntime()
-      return json(res, 200, { success: true })
+      return json(req, res, 200, { success: true })
     }
 
     if (req.method === 'POST' && url.pathname === '/v1/local-translate/delete-model') {
       const body = await readJsonBody(req)
       const variant = selectVariant(manifest, body.variantId)
       if (installProgressFor(variant, body.storagePath)) {
-        return json(res, 409, { success: false, message: 'Model is still downloading' })
+        return json(req, res, 409, { success: false, message: 'Model is still downloading' })
       }
-      return json(res, 200, { success: true, variant: variant.id, ...deleteVariantModel(variant, body.storagePath) })
+      return json(req, res, 200, { success: true, variant: variant.id, ...deleteVariantModel(variant, body.storagePath) })
     }
 
     if (req.method === 'POST' && url.pathname === '/v1/translate') {
       const body = await readJsonBody(req)
-      return json(res, 200, await translate(body))
+      return json(req, res, 200, await translate(body))
     }
 
-    return json(res, 404, { success: false, message: 'Not found' })
+    return json(req, res, 404, { success: false, message: 'Not found' })
   } catch (error) {
-    return json(res, 500, { success: false, message: error.message })
+    return json(req, res, 500, { success: false, message: error.message })
   }
 }
 

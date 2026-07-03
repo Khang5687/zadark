@@ -20,7 +20,7 @@ const MANIFEST_PATH = process.env.ZADARK_LOCAL_TRANSLATE_MANIFEST || path.join(_
 const DEFAULT_STORAGE_DIR = process.env.ZADARK_LOCAL_TRANSLATE_STORAGE_DIR || DATA_DIR
 const IDLE_TIMEOUT_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_IDLE_MS || 15 * 60 * 1000)
 const HF_DEFAULT_ENDPOINT = 'https://huggingface.co'
-const RUNTIME_DIR = process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_DIR || path.join(__dirname, 'runtimes')
+const RUNTIME_DIR = process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_DIR || path.join(DATA_DIR, 'runtimes')
 const RUNTIME_STATUS_TTL_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_STATUS_TTL_MS || 30 * 1000)
 
 const state = {

@@ -41,27 +41,28 @@ It does not require `uv`, `huggingface-cli`, or Python tooling for the download.
 Production model URLs and Hugging Face revisions are pinned so upstream changes
 cannot silently replace an installed model.
 
-Runtime binaries are separate from model files. ZaDark looks for bundled
-runtimes first, then falls back to commands already on PATH:
+Runtime binaries are separate from model files. ZaDark looks for runtimes in
+its writable data directory first, then falls back to commands already on PATH:
 
-- `runtimes/mlx-macos-arm64/bin/python3` for MLX on Apple Silicon.
-- `runtimes/llama.cpp/bin/llama-server` for llama.cpp fallback.
+- `~/.zadark/local-translate/runtimes/mlx-macos-arm64/bin/python3` for MLX on
+  Apple Silicon.
+- `~/.zadark/local-translate/runtimes/llama.cpp/bin/llama-server` for llama.cpp
+  fallback.
 
 If a variant declares a runtime artifact, `/local-translate/install` downloads
 it before the model:
 
 - `runtimeUrl`: artifact URL.
 - `runtimeArchiveUrl`: `.tar`, `.tar.gz`, or `.zip` artifact URL extracted under
-  `runtimes/`.
+  the writable local translation data directory.
 - `runtimeSha256`: optional checksum.
 - `runtimeArchiveSha256`: optional archive checksum.
 - `runtimeEstimatedBytes`: optional disk/progress estimate.
 - `runtimePath`: optional path under `runtimes/`; otherwise the first bundled
   runtime candidate is used.
 
-Those runtime folders are the packaging contract. If they are missing, status
-will report `runtimeAvailable: false` so the UI can avoid starting a broken
-translation flow.
+If a runtime is missing, status reports `runtimeAvailable: false` so the UI can
+avoid starting a broken translation flow.
 
 The heavy model runtime starts on demand and is stopped after the idle timeout
 (`ZADARK_LOCAL_TRANSLATE_IDLE_MS`, default 15 minutes). The backend itself is a

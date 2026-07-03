@@ -5,6 +5,8 @@ const http = require('http')
 const os = require('os')
 const path = require('path')
 
+const testRuntimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zadark-local-translate-runtime-'))
+process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_DIR = testRuntimeDir
 const backend = require('../src/pc/local-translate/backend')
 
 function requestJson (baseUrl, pathname, headers = {}) {
@@ -174,6 +176,7 @@ describe('local translate backend', () => {
     await new Promise((resolve) => server.close(resolve))
     await new Promise((resolve) => hfServer.close(resolve))
     fs.rmSync(tempDir, { recursive: true, force: true })
+    fs.rmSync(testRuntimeDir, { recursive: true, force: true })
   })
 
   it('parses df output for disk visualization', () => {
@@ -447,9 +450,8 @@ describe('local translate backend', () => {
   it('extracts a declared runtime archive before the model', async () => {
     const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
     process.env.ZADARK_HF_ENDPOINT = hfBaseUrl
-    const runtimeDir = path.join(__dirname, '../src/pc/local-translate/runtimes')
-    const extractedRuntimeDir = path.join(runtimeDir, 'archive-runtime')
-    const runtimeDownloadDir = path.join(runtimeDir, '.downloads')
+    const extractedRuntimeDir = path.join(testRuntimeDir, 'archive-runtime')
+    const runtimeDownloadDir = path.join(testRuntimeDir, '.downloads')
 
     try {
       fs.rmSync(extractedRuntimeDir, { recursive: true, force: true })

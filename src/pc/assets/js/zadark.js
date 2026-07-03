@@ -2087,9 +2087,12 @@
     $(document).enableTranslateMessage(translateTarget)
   }
 
+  let localTranslateStatusTimer = null
+
   const loadLocalTranslateStatus = async () => {
     const $status = $(localTranslateStatusElName)
     const $button = $(buttonDeleteLocalTranslateModelElName)
+    if (localTranslateStatusTimer) clearTimeout(localTranslateStatusTimer)
 
     try {
       const status = await getLocalTranslateStatus()
@@ -2097,9 +2100,14 @@
       const usedText = formatLocalTranslateBytes(selected.usedBytes || selected.estimatedBytes)
 
       $button.data('variant-id', selected.id)
-      $button.prop('disabled', !selected.installed)
+      $button.prop('disabled', !selected.installed || selected.installing)
 
-      if (selected.runtimeAvailable === false) {
+      if (selected.installing) {
+        const progress = selected.installProgress || {}
+        $status.text(`Model dịch: đang tải ${progress.percent || 0}%`)
+        $status.attr('title', progress.file || selected.storagePath)
+        localTranslateStatusTimer = setTimeout(loadLocalTranslateStatus, 1000)
+      } else if (selected.runtimeAvailable === false) {
         $status.text('Model dịch: runtime chưa sẵn sàng')
         $status.attr('title', selected.runtimeMessage)
       } else if (selected.installed) {

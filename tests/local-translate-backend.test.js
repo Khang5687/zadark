@@ -201,11 +201,17 @@ describe('local translate backend', () => {
       const first = await postJson(baseUrl, '/v1/translate', body)
       const second = await postJson(baseUrl, '/v1/translate', body)
       const differentContext = await postJson(baseUrl, '/v1/translate', { ...body, context: ['other'] })
+      await postJson(baseUrl, '/v1/local-translate/delete-model', {
+        variantId: body.variantId,
+        storagePath: tempDir
+      })
+      const afterDelete = await postJson(baseUrl, '/v1/translate', body)
 
       expect(first.status).toBe(200)
       expect(first.body.cached).toBeUndefined()
       expect(second.body.cached).toBe(true)
       expect(differentContext.body.cached).toBeUndefined()
+      expect(afterDelete.body.cached).toBeUndefined()
     } finally {
       if (previousMock) {
         process.env.ZADARK_LOCAL_TRANSLATE_MOCK = previousMock
@@ -217,15 +223,19 @@ describe('local translate backend', () => {
 
   it('rejects real translation when the selected model is not installed', async () => {
     const previousMock = process.env.ZADARK_LOCAL_TRANSLATE_MOCK
-    delete process.env.ZADARK_LOCAL_TRANSLATE_MOCK
+    const body = {
+      variantId: 'desktop-llamacpp-translategemma-4b-q4',
+      storagePath: tempDir,
+      text: 'hello',
+      target: 'vi'
+    }
 
     try {
-      const result = await postJson(baseUrl, '/v1/translate', {
-        variantId: 'desktop-llamacpp-translategemma-4b-q4',
-        storagePath: tempDir,
-        text: 'hello',
-        target: 'vi'
-      })
+      process.env.ZADARK_LOCAL_TRANSLATE_MOCK = '1'
+      await postJson(baseUrl, '/v1/translate', body)
+
+      delete process.env.ZADARK_LOCAL_TRANSLATE_MOCK
+      const result = await postJson(baseUrl, '/v1/translate', body)
 
       expect(result.status).toBe(500)
       expect(result.body.message).toBe('Model is not installed')

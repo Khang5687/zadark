@@ -539,6 +539,7 @@ function stopRuntime () {
 
 function deleteVariantModel (variant, storagePath) {
   stopRuntime()
+  clearVariantTranslationCache(variant.id)
   const modelDir = modelDirFor(variant, storagePath)
   fs.rmSync(modelDir, { recursive: true, force: true })
   return { deletedPath: modelDir }
@@ -606,6 +607,14 @@ function setCachedTranslation (key, value) {
   translationCache.delete(oldestKey)
 }
 
+function clearVariantTranslationCache (variantId) {
+  for (const key of translationCache.keys()) {
+    if (key.startsWith(`{"variant":"${variantId}"`)) {
+      translationCache.delete(key)
+    }
+  }
+}
+
 function postJson (url, body) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url)
@@ -669,10 +678,11 @@ async function translate (body) {
   const manifest = loadManifest()
   const variant = state.variant || selectVariant(manifest, body.variantId)
   const cacheKey = translationCacheKey(variant, body)
-  const cached = getCachedTranslation(cacheKey)
-  if (cached) return { ...cached, cached: true }
 
   if (process.env.ZADARK_LOCAL_TRANSLATE_MOCK === '1') {
+    const cached = getCachedTranslation(cacheKey)
+    if (cached) return { ...cached, cached: true }
+
     const result = {
       success: true,
       languageName: body.source || 'Auto',
@@ -688,6 +698,9 @@ async function translate (body) {
   if (!status.installed) {
     throw new Error(status.installing ? 'Model is still downloading' : 'Model is not installed')
   }
+
+  const cached = getCachedTranslation(cacheKey)
+  if (cached) return { ...cached, cached: true }
 
   startRuntime(variant, root)
 

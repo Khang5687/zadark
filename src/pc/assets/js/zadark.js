@@ -77,6 +77,7 @@
   const ZADARK_FONT_SIZE_KEY = '@ZaDark:FONT_SIZE'
   const ZADARK_TRANSLATE_TARGET_KEY = '@ZaDark:TRANSLATE_TARGET'
   const ZADARK_THREAD_CHAT_BG_KEY = 'THREAD_CHAT_BG' // localforage key
+  const ZADARK_LOCAL_TRANSLATE_API_URL = 'http://127.0.0.1:5555/v1'
 
   const ZADARK_ENABLED_HIDE_LATEST_MESSAGE_KEY = '@ZaDark:ENABLED_HIDE_LATEST_MESSAGE'
   const ZADARK_ENABLED_HIDE_CONV_AVATAR_KEY = '@ZaDark:ENABLED_HIDE_CONV_AVATAR'
@@ -1327,6 +1328,8 @@
   const inputFontFamilyElName = '#js-input-font-family'
   const selectFontSizeElName = '#js-select-font-size'
   const selectTranslateTargetElName = '#js-select-translate-target'
+  const localTranslateStatusElName = '#js-local-translate-status'
+  const buttonDeleteLocalTranslateModelElName = '#js-button-delete-local-translate-model'
   const inputThreadChatBgElName = '#js-input-thread-chat-bg'
   const buttonDelThreadChatBgElName = '#js-button-del-thread-chat-bg'
 
@@ -1422,6 +1425,35 @@
       const isEnabled = $(this).is(':checked')
       ZaDarkUtils.updateBlockSettings(blockId, isEnabled)
     }
+  }
+
+  const formatLocalTranslateBytes = (bytes) => {
+    if (!bytes) return '0 GB'
+    return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
+  }
+
+  const getLocalTranslateStatus = async () => {
+    const res = await fetch(`${ZADARK_LOCAL_TRANSLATE_API_URL}/local-translate/status`)
+    const json = await res.json()
+    if (!res.ok) {
+      throw new Error(json.message || 'Không thể kiểm tra model dịch')
+    }
+    return json
+  }
+
+  const deleteLocalTranslateModel = async (variantId) => {
+    const res = await fetch(`${ZADARK_LOCAL_TRANSLATE_API_URL}/local-translate/delete-model`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ variantId })
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) {
+      throw new Error(json.message || 'Không thể xoá model dịch')
+    }
+    return json
   }
 
   function disableFeatureBlock () {
@@ -1541,10 +1573,18 @@
           <div class="font-settings">
             <label class="font-settings__label" style="flex: 1;">
               Dịch tin nhắn
-              <i class="zadark-icon zadark-icon--question" data-tippy-content='<p>Bạn di chuyển chuột vào đoạn tin nhắn và chọn biểu tượng <i class="zadark-icon zadark-icon--translate" style="position: relative; top: 3px; font-size: 18px;"></i> để dịch tin nhắn.</p><p>Bạn có 20 lượt dịch tin nhắn mỗi ngày.</p>'></i>
+              <i class="zadark-icon zadark-icon--question" data-tippy-content='<p>Bạn di chuyển chuột vào đoạn tin nhắn và chọn biểu tượng <i class="zadark-icon zadark-icon--translate" style="position: relative; top: 3px; font-size: 18px;"></i> để dịch tin nhắn.</p><p>Trên ZaDark PC, model AI chạy cục bộ trên máy tính của bạn.</p>'></i>
             </label>
 
             <select id="js-select-translate-target" class="zadark-select"></select>
+          </div>
+
+          <div class="font-settings font-settings--compact">
+            <label id="js-local-translate-status" class="font-settings__label font-settings__label--muted" style="flex: 1;">
+              Model dịch: đang kiểm tra...
+            </label>
+
+            <button id="js-button-delete-local-translate-model" class="btn-del" disabled>Xoá model</button>
           </div>
 
           <div class="font-settings">
@@ -2047,6 +2087,53 @@
     $(document).enableTranslateMessage(translateTarget)
   }
 
+  const loadLocalTranslateStatus = async () => {
+    const $status = $(localTranslateStatusElName)
+    const $button = $(buttonDeleteLocalTranslateModelElName)
+
+    try {
+      const status = await getLocalTranslateStatus()
+      const selected = status.selected
+      const usedText = formatLocalTranslateBytes(selected.usedBytes || selected.estimatedBytes)
+
+      $button.data('variant-id', selected.id)
+      $button.prop('disabled', !selected.installed)
+
+      if (selected.installed) {
+        $status.text(`Model dịch: đã tải ${usedText}`)
+        $status.attr('title', selected.modelPath)
+      } else {
+        $status.text(`Model dịch: chưa tải (${formatLocalTranslateBytes(selected.estimatedBytes)})`)
+        $status.attr('title', selected.storagePath)
+      }
+    } catch (error) {
+      $status.text('Model dịch: chưa sẵn sàng')
+      $status.attr('title', error.message)
+      $button.prop('disabled', true)
+    }
+  }
+
+  const handleDeleteLocalTranslateModel = async function () {
+    const $button = $(this)
+    const variantId = $button.data('variant-id')
+    if (!variantId) return
+
+    $button.prop('disabled', true).text('Đang xoá...')
+    try {
+      await deleteLocalTranslateModel(variantId)
+      ZaDarkUtils.showToast('Đã xoá model dịch')
+      await loadLocalTranslateStatus()
+    } catch (error) {
+      ZaDarkUtils.showToast(error.message, {
+        className: 'toastify--error',
+        duration: 3000
+      })
+      $button.prop('disabled', false)
+    } finally {
+      $button.text('Xoá model')
+    }
+  }
+
   const loadThreadChatBg = async () => {
     const settingKey = ZaDarkUtils.getThreadChatBgSettingKey()
     if (!settingKey) {
@@ -2087,6 +2174,7 @@
   const handleOpenZaDarkPopup = (buttonEl, popupEl) => {
     return () => {
       loadPopupState()
+      loadLocalTranslateStatus()
       ZaDarkUtils.updateKnownVersionState(buttonEl)
 
       setZaDarkPopupVisible(buttonEl, popupEl, true)
@@ -2167,6 +2255,8 @@
         $(document).enableTranslateMessage(translateTarget)
       }
     })
+
+    $(buttonDeleteLocalTranslateModelElName).on('click', handleDeleteLocalTranslateModel)
 
     $(inputThreadChatBgElName).on('click', function (e) {
       const convId = ZaDarkUtils.getCurrentConvId()
@@ -2289,6 +2379,7 @@
     loadKnownVersionState(buttonEl)
     loadPopupScrollEvent()
     loadTranslate()
+    loadLocalTranslateStatus()
     loadTippy()
 
     ZaDarkUtils.migrateData()

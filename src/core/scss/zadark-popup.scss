@@ -681,6 +681,11 @@ body:not(.zadark--use-hotkeys) {
     transition: all 0.25s ease-in-out;
     cursor: pointer;
 
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     &:hover {
       color: var(--zadark-neutral-base);
     }
@@ -710,9 +715,23 @@ body:not(.zadark--use-hotkeys) {
       border-color: var(--zadark-border-base);
     }
 
+    &--compact {
+      margin-top: 0;
+      padding-top: 4px;
+      border-top: 0;
+      font-size: 12px;
+    }
+
     .font-settings__label {
       flex: 1;
       font-weight: var(--zadark-font-regular);
+
+      &--muted {
+        overflow: hidden;
+        color: var(--zadark-neutral-500);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
 
       a {
         color: var(--zadark-neutral-base);

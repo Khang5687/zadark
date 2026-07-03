@@ -361,6 +361,13 @@ describe('local translate backend', () => {
       expect(repaired.files).toBe(2)
       expect(testModelDownloadCount).toBe(1)
 
+      fs.rmSync(path.join(installed.path, '.snapshot-complete.json'))
+      fs.writeFileSync(path.join(installed.path, 'model.safetensors'), 'corrupt model')
+      const repairedCorrupt = await backend.installVariant(variant, tempDir)
+      expect(repairedCorrupt.files).toBe(2)
+      expect(fs.readFileSync(path.join(installed.path, 'model.safetensors'), 'utf8')).toBe('tiny model')
+      expect(testModelDownloadCount).toBe(2)
+
       fs.rmSync(path.join(installed.path, 'model.safetensors'))
       const afterManualDelete = backend.variantStatus(variant, tempDir)
       expect(afterManualDelete.installed).toBe(false)

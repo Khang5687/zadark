@@ -440,6 +440,7 @@ function downloadFile (url, destPath, expectedSha256, onProgress) {
             reject(new Error('Downloaded model checksum mismatch'))
             return
           }
+          fs.rmSync(destPath, { force: true })
           fs.renameSync(tmpPath, destPath)
           resolve({ path: destPath, sha256: actualSha256 })
         })

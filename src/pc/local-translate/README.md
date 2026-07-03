@@ -52,6 +52,8 @@ Windows x64 uses the official llama.cpp CPU runtime as the reliable baseline.
 GPU-specific Windows runtimes are not selected until launch fallback is
 implemented.
 
+Intel macOS and Linux x64 use pinned official llama.cpp CPU runtimes.
+
 Runtime binaries are separate from model files. ZaDark looks for runtimes in
 its writable data directory first, then falls back to commands already on PATH:
 

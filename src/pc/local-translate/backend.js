@@ -1041,10 +1041,15 @@ async function route (req, res) {
 function selfCheck () {
   const manifest = loadManifest()
   const llamaVariant = selectVariant(manifest, 'desktop-llamacpp-translategemma-4b-q4')
-  const windowsVariant = selectVariant(manifest, 'windows-x64-llamacpp-translategemma-4b-q4')
   assert(llamaVariant.id === 'desktop-llamacpp-translategemma-4b-q4')
   assert(fs.existsSync(replaceArgTokens(llamaVariant.serverArgs[llamaVariant.serverArgs.length - 1], llamaVariant, os.tmpdir())))
-  assert(variantStatus(windowsVariant, os.tmpdir()).runtimeDownloadable)
+  const runtimeVariantIds = [
+    'macos-arm64-llamacpp-translategemma-4b-q4',
+    'macos-x64-llamacpp-translategemma-4b-q4',
+    'windows-x64-llamacpp-translategemma-4b-q4',
+    'linux-x64-llamacpp-translategemma-4b-q4'
+  ]
+  runtimeVariantIds.forEach((id) => assert(isRuntimeDownloadable(selectVariant(manifest, id))))
   assert(variantStatus(selectVariant(manifest, 'macos-arm64-mlx-translategemma-4b-q4'), os.tmpdir()).downloadable)
   assert(variantStatus(selectVariant(manifest, 'desktop-llamacpp-translategemma-4b-q4'), os.tmpdir()).downloadable)
   assert(!runtimeStatus({ serverCommand: '__zadark_missing_runtime__' }).available)

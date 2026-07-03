@@ -77,4 +77,132 @@
       background: var(--blue-quote);
     }
   }
+
+  .zadark-local-translate-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 999999;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  .zadark-local-translate-dialog__box {
+    width: min(420px, 100%);
+    padding: 18px;
+
+    border: 1px solid var(--zadark-border-base);
+    border-radius: var(--zadark-rounded-base);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.24);
+
+    background: var(--zadark-white-base);
+    color: var(--zadark-neutral-base);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .zadark-local-translate-dialog__title {
+    margin-bottom: 8px;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .zadark-local-translate-dialog__text + .zadark-local-translate-dialog__text {
+    margin-top: 8px;
+  }
+
+  .zadark-local-translate-dialog__disk {
+    margin-top: 14px;
+  }
+
+  .zadark-local-translate-dialog__bar {
+    position: relative;
+    overflow: hidden;
+    height: 14px;
+
+    border-radius: 7px;
+
+    background: var(--zadark-grey-600);
+  }
+
+  .zadark-local-translate-dialog__bar-used,
+  .zadark-local-translate-dialog__bar-model {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+  }
+
+  .zadark-local-translate-dialog__bar-used {
+    background: var(--zadark-border-base);
+  }
+
+  .zadark-local-translate-dialog__bar-model {
+    background: var(--zadark-primary-base);
+    animation: zadark-local-translate-model-pulse 1.2s ease-in-out infinite;
+  }
+
+  .zadark-local-translate-dialog__disk-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 6px;
+
+    color: var(--zadark-neutral-500);
+    font-size: 12px;
+  }
+
+  .zadark-local-translate-dialog__error {
+    min-height: 18px;
+    margin-top: 10px;
+
+    color: var(--text-errors);
+    font-size: 12px;
+  }
+
+  .zadark-local-translate-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .zadark-local-translate-dialog__button {
+    min-width: 84px;
+    height: 32px;
+    padding: 0 12px;
+
+    border: 1px solid var(--zadark-border-base);
+    border-radius: var(--zadark-rounded-base);
+
+    background: transparent;
+    color: var(--zadark-neutral-base);
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  .zadark-local-translate-dialog__button--primary {
+    border-color: var(--zadark-primary-dark);
+    background: var(--zadark-primary-base);
+    color: #fff;
+  }
+
+  @keyframes zadark-local-translate-model-pulse {
+    0%,
+    100% {
+      opacity: 0.65;
+    }
+
+    50% {
+      opacity: 1;
+    }
+  }
 }

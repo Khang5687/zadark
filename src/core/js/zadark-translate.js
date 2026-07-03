@@ -7,8 +7,129 @@
     return ZADARK_API_URL
   }
 
+  const isLocalTranslate = () => document.body.classList.contains('zadark-pc')
+
+  const formatBytes = (bytes) => {
+    if (!bytes) return '0 GB'
+    return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
+  }
+
+  const getLocalTranslateStatus = async () => {
+    const res = await fetch(getTranslateApiURL() + '/local-translate/status')
+    const json = await res.json()
+    if (!res.ok) {
+      throw new Error(json.message || 'Không thể kiểm tra model AI')
+    }
+    return json
+  }
+
+  const installLocalTranslateModel = async (variantId) => {
+    const res = await fetch(getTranslateApiURL() + '/local-translate/install', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ variantId })
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) {
+      throw new Error(json.message || 'Không thể tải model AI')
+    }
+    return json
+  }
+
+  const showLocalTranslateSetup = (status) => {
+    return new Promise((resolve) => {
+      const selected = status.selected
+      const disk = selected.disk || {}
+      const totalBytes = disk.totalBytes || 0
+      const freeBytes = disk.freeBytes || 0
+      const usedPercent = totalBytes ? Math.min(100, ((totalBytes - freeBytes) / totalBytes) * 100) : 0
+      const modelPercent = disk.modelPercent || 0
+      const modelLeft = Math.min(100, usedPercent)
+      const modelWidth = Math.max(2, Math.min(100 - modelLeft, modelPercent))
+      const canDownload = selected.downloadable && disk.fits !== false
+
+      const $dialog = $(`
+        <div class="zadark-local-translate-dialog">
+          <div class="zadark-local-translate-dialog__box">
+            <div class="zadark-local-translate-dialog__title">Dịch AI cục bộ</div>
+            <div class="zadark-local-translate-dialog__text">
+              Dịch tin nhắn miễn phí và riêng tư. Model AI sẽ chạy trực tiếp trên máy tính của bạn.
+            </div>
+            <div class="zadark-local-translate-dialog__text">
+              ZaDark cần tải khoảng <strong>${formatBytes(selected.estimatedBytes)}</strong> dữ liệu AI. Ổ đĩa này sẽ dùng thêm khoảng <strong>${modelPercent}%</strong> dung lượng.
+            </div>
+            <div class="zadark-local-translate-dialog__disk">
+              <div class="zadark-local-translate-dialog__bar">
+                <div class="zadark-local-translate-dialog__bar-used" style="width: ${usedPercent}%"></div>
+                <div class="zadark-local-translate-dialog__bar-model" style="left: ${modelLeft}%; width: ${modelWidth}%"></div>
+              </div>
+              <div class="zadark-local-translate-dialog__disk-meta">
+                <span>Còn trống: ${formatBytes(freeBytes)}</span>
+                <span>Model AI: ${formatBytes(selected.estimatedBytes)}</span>
+              </div>
+            </div>
+            <div class="zadark-local-translate-dialog__error"></div>
+            <div class="zadark-local-translate-dialog__actions">
+              <button type="button" class="zadark-local-translate-dialog__button" data-action="cancel">Huỷ</button>
+              <button type="button" class="zadark-local-translate-dialog__button zadark-local-translate-dialog__button--primary" data-action="install" ${canDownload ? '' : 'disabled'}>Tải model AI</button>
+            </div>
+          </div>
+        </div>
+      `)
+
+      const finish = (value) => {
+        $dialog.remove()
+        resolve(value)
+      }
+
+      const $error = $dialog.find('.zadark-local-translate-dialog__error')
+      if (!selected.downloadable) {
+        $error.text('Model AI chưa có gói tải thử nghiệm.')
+      } else if (disk.fits === false) {
+        $error.text('Ổ đĩa này không đủ dung lượng trống.')
+      }
+
+      $dialog.on('click', '[data-action="cancel"]', () => finish(false))
+      $dialog.on('click', '[data-action="install"]', async function () {
+        const $button = $(this)
+        $button.prop('disabled', true).text('Đang tải...')
+        $error.text('')
+        try {
+          await installLocalTranslateModel(selected.id)
+          finish(true)
+        } catch (error) {
+          $button.prop('disabled', false).text('Tải model AI')
+          $error.text(error.message)
+        }
+      })
+
+      $('body').append($dialog)
+    })
+  }
+
+  const ensureLocalTranslateReady = async () => {
+    if (!isLocalTranslate()) return true
+
+    const status = await getLocalTranslateStatus()
+    if (status.selected && status.selected.installed) {
+      return true
+    }
+
+    return showLocalTranslateSetup(status)
+  }
+
   const translate = async (text, target) => {
     try {
+      const isReady = await ensureLocalTranslateReady()
+      if (!isReady) {
+        return {
+          success: false,
+          message: 'Bạn chưa tải model AI'
+        }
+      }
+
       const res = await fetch(getTranslateApiURL() + '/translate', {
         method: 'POST',
         headers: {

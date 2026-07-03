@@ -8,6 +8,7 @@ const path = require('path')
 const testRuntimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zadark-local-translate-runtime-'))
 process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_DIR = testRuntimeDir
 const backend = require('../src/pc/local-translate/backend')
+const runtimeZipBase64 = 'UEsDBAoAAAAAAAy241wAAAAAAAAAAAAAAAAMABwAemlwLXJ1bnRpbWUvVVQJAAPH2Udqx9lHanV4CwABBPUBAAAEFAAAAFBLAwQKAAAAAAAMtuNcAAAAAAAAAAAAAAAAEAAcAHppcC1ydW50aW1lL2Jpbi9VVAkAA8fZR2rH2UdqdXgLAAEE9QEAAAQUAAAAUEsDBAoAAAAAAAy241zihkXDEQAAABEAAAAbABwAemlwLXJ1bnRpbWUvYmluL2Zha2Utc2VydmVyVVQJAAPH2Udqx9lHanV4CwABBPUBAAAEFAAAACMhL2Jpbi9zaApleGl0IDAKUEsBAh4DCgAAAAAADLbjXAAAAAAAAAAAAAAAAAwAGAAAAAAAAAAQAO1BAAAAAHppcC1ydW50aW1lL1VUBQADx9lHanV4CwABBPUBAAAEFAAAAFBLAQIeAwoAAAAAAAy241wAAAAAAAAAAAAAAAAQABgAAAAAAAAAEADtQUYAAAB6aXAtcnVudGltZS9iaW4vVVQFAAPH2UdqdXgLAAEE9QEAAAQUAAAAUEsBAh4DCgAAAAAADLbjXOKGRcMRAAAAEQAAABsAGAAAAAAAAQAAAO2BkAAAAHppcC1ydW50aW1lL2Jpbi9mYWtlLXNlcnZlclVUBQADx9lHanV4CwABBPUBAAAEFAAAAFBLBQYAAAAAAwADAAkBAAD2AAAAAAA='
 
 function requestJson (baseUrl, pathname, headers = {}) {
   return new Promise((resolve, reject) => {
@@ -65,6 +66,8 @@ describe('local translate backend', () => {
   let testModelDownloadCount
   let runtimeArchivePath
   let runtimeArchiveSha256
+  let runtimeZipPath
+  let runtimeZipSha256
 
   beforeAll(async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zadark-local-translate-'))
@@ -76,6 +79,9 @@ describe('local translate backend', () => {
     fs.chmodSync(path.join(archiveRuntimeBin, 'fake-server'), 0o755)
     childProcess.execFileSync('tar', ['-cf', runtimeArchivePath, '-C', archiveRoot, 'archive-runtime'])
     runtimeArchiveSha256 = crypto.createHash('sha256').update(fs.readFileSync(runtimeArchivePath)).digest('hex')
+    runtimeZipPath = path.join(tempDir, 'zip-runtime.zip')
+    fs.writeFileSync(runtimeZipPath, Buffer.from(runtimeZipBase64, 'base64'))
+    runtimeZipSha256 = crypto.createHash('sha256').update(fs.readFileSync(runtimeZipPath)).digest('hex')
 
     server = http.createServer(backend.route)
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -146,6 +152,12 @@ describe('local translate backend', () => {
       if (req.url === '/runtime/archive-runtime.tar') {
         res.writeHead(200)
         fs.createReadStream(runtimeArchivePath).pipe(res)
+        return
+      }
+
+      if (req.url === '/runtime/zip-runtime.zip') {
+        res.writeHead(200)
+        fs.createReadStream(runtimeZipPath).pipe(res)
         return
       }
 
@@ -578,6 +590,44 @@ describe('local translate backend', () => {
       await backend.installVariant(variant, tempDir)
 
       expect(fs.existsSync(runtimePath)).toBe(true)
+      expect(backend.runtimeStatus(variant).available).toBe(true)
+    } finally {
+      if (previousEndpoint) {
+        process.env.ZADARK_HF_ENDPOINT = previousEndpoint
+      } else {
+        delete process.env.ZADARK_HF_ENDPOINT
+      }
+      fs.rmSync(extractedRuntimeDir, { recursive: true, force: true })
+      fs.rmSync(runtimeDownloadDir, { recursive: true, force: true })
+    }
+  })
+
+  it('extracts a ZIP runtime archive used by Windows', async () => {
+    const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
+    process.env.ZADARK_HF_ENDPOINT = hfBaseUrl
+    const extractedRuntimeDir = path.join(testRuntimeDir, 'zip-runtime')
+    const runtimeDownloadDir = path.join(testRuntimeDir, '.downloads')
+
+    try {
+      fs.rmSync(extractedRuntimeDir, { recursive: true, force: true })
+      fs.rmSync(runtimeDownloadDir, { recursive: true, force: true })
+      const runtimePath = path.join(extractedRuntimeDir, 'bin', 'fake-server')
+      const variant = {
+        id: 'runtime-zip-test',
+        runtime: 'test',
+        runtimeCandidates: [runtimePath],
+        runtimeArchiveUrl: `${hfBaseUrl}/runtime/zip-runtime.zip`,
+        runtimeArchiveSha256: runtimeZipSha256,
+        runtimeEstimatedBytes: fs.statSync(runtimeZipPath).size,
+        modelRef: 'test/model',
+        downloadKind: 'hf-snapshot',
+        revision: 'main',
+        estimatedBytes: 10
+      }
+
+      await backend.installVariant(variant, tempDir)
+
+      expect(fs.readFileSync(runtimePath, 'utf8')).toBe('#!/bin/sh\nexit 0\n')
       expect(backend.runtimeStatus(variant).available).toBe(true)
     } finally {
       if (previousEndpoint) {

@@ -13,7 +13,7 @@
       "downloadKind": "hf-snapshot",
       "revision": "main",
       "sha256": "",
-      "estimatedBytes": 2147483648,
+      "estimatedBytes": 2222615758,
       "serverCommand": "python3",
       "runtimeCandidates": ["{runtimeDir}/mlx-macos-arm64/bin/python3", "python3"],
       "serverArgs": ["-m", "mlx_lm.server", "--model", "{modelPath}", "--port", "{port}"],

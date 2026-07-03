@@ -210,15 +210,40 @@ function validateArchiveEntries (entries) {
   })
 }
 
-function extractRuntimeArchive (archivePath) {
-  if (!commandExists('tar')) throw new Error('Runtime archive extractor is not available')
+function archiveEntriesWithTool (archivePath) {
+  if (commandExists('tar')) {
+    try {
+      return {
+        tool: 'tar',
+        entries: childProcess.execFileSync('tar', ['-tf', archivePath], { encoding: 'utf8' })
+          .split(/\r?\n/)
+          .filter(Boolean)
+      }
+    } catch (error) {}
+  }
 
-  const entries = childProcess.execFileSync('tar', ['-tf', archivePath], { encoding: 'utf8' })
-    .split(/\r?\n/)
-    .filter(Boolean)
-  validateArchiveEntries(entries)
+  if (commandExists('unzip')) {
+    return {
+      tool: 'unzip',
+      entries: childProcess.execFileSync('unzip', ['-Z1', archivePath], { encoding: 'utf8' })
+        .split(/\r?\n/)
+        .filter(Boolean)
+    }
+  }
+
+  throw new Error('Runtime archive extractor is not available')
+}
+
+function extractRuntimeArchive (archivePath) {
+  const archive = archiveEntriesWithTool(archivePath)
+  validateArchiveEntries(archive.entries)
   fs.mkdirSync(RUNTIME_DIR, { recursive: true })
-  childProcess.execFileSync('tar', ['-xf', archivePath, '-C', RUNTIME_DIR], { stdio: 'ignore' })
+  if (archive.tool === 'tar') {
+    childProcess.execFileSync('tar', ['-xf', archivePath, '-C', RUNTIME_DIR], { stdio: 'ignore' })
+    return
+  }
+
+  childProcess.execFileSync('unzip', ['-oq', archivePath, '-d', RUNTIME_DIR], { stdio: 'ignore' })
 }
 
 function runtimeStatusCacheKey (variant) {

@@ -49,7 +49,7 @@ If a variant declares a runtime artifact, `/local-translate/install` downloads
 it before the model:
 
 - `runtimeUrl`: artifact URL.
-- `runtimeArchiveUrl`: `.tar`/`.tar.gz` artifact URL extracted under
+- `runtimeArchiveUrl`: `.tar`, `.tar.gz`, or `.zip` artifact URL extracted under
   `runtimes/`.
 - `runtimeSha256`: optional checksum.
 - `runtimeArchiveSha256`: optional archive checksum.

@@ -1336,6 +1336,7 @@
   const selectFontSizeElName = '#js-select-font-size'
   const selectTranslateTargetElName = '#js-select-translate-target'
   const localTranslateStatusElName = '#js-local-translate-status'
+  const localTranslateProgressElName = '#js-local-translate-progress'
   const inputLocalTranslateStoragePathElName = '#js-input-local-translate-storage-path'
   const buttonDeleteLocalTranslateModelElName = '#js-button-delete-local-translate-model'
   const inputThreadChatBgElName = '#js-input-thread-chat-bg'
@@ -1598,6 +1599,10 @@
             </label>
 
             <button id="js-button-delete-local-translate-model" class="btn-del" disabled>Xoá model</button>
+          </div>
+
+          <div class="font-settings font-settings--compact">
+            <progress id="js-local-translate-progress" class="zadark-local-translate-progress" max="100" value="0" hidden></progress>
           </div>
 
           <div class="font-settings font-settings--compact">
@@ -2118,6 +2123,7 @@
 
   const loadLocalTranslateStatus = async () => {
     const $status = $(localTranslateStatusElName)
+    const $progress = $(localTranslateProgressElName)
     const $button = $(buttonDeleteLocalTranslateModelElName)
     const $pathInput = $(inputLocalTranslateStoragePathElName)
     stopLocalTranslateStatusPolling()
@@ -2130,11 +2136,14 @@
       $pathInput.attr('title', selected.storagePath)
       $button.data('variant-id', selected.id)
       $button.prop('disabled', !selected.installed || selected.installing)
+      $progress.prop('hidden', true).val(0)
 
       if (selected.installing) {
         const progress = selected.installProgress || {}
-        $status.text(`Model dịch: đang tải ${progress.percent || 0}%`)
+        const percent = progress.percent || 0
+        $status.text(`Model dịch: đang tải trong nền ${percent}%`)
         $status.attr('title', progress.file || selected.storagePath)
+        $progress.prop('hidden', false).val(percent)
         localTranslateStatusTimer = setTimeout(loadLocalTranslateStatus, 1000)
       } else if (selected.runtimeAvailable === false) {
         $status.text('Model dịch: runtime chưa sẵn sàng')
@@ -2150,6 +2159,7 @@
       $status.text('Model dịch: chưa sẵn sàng')
       $status.attr('title', error.message)
       $pathInput.attr('title', error.message)
+      $progress.prop('hidden', true).val(0)
       $button.prop('disabled', true)
     }
   }

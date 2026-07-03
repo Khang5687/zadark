@@ -27,6 +27,8 @@
     return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
   }
 
+  let localTranslateNotReadyMessage = 'Bạn chưa tải model AI'
+
   const normalizeTranslateText = (text) => String(text || '').replace(/(?:\r\n|\r|\n)/g, '<br>').trim()
 
   const normalizeContextText = (text) => String(text || '').replace(/\s+/g, ' ').trim()
@@ -70,6 +72,7 @@
       const isInstalling = !!selected.installing
       const installProgress = selected.installProgress || {}
       const downloadBytes = selected.downloadEstimatedBytes || selected.estimatedBytes
+      const freeAfterBytes = Math.max(0, freeBytes - downloadBytes)
       const runtimeCanInstall = selected.runtimeAvailable !== false || selected.runtimeDownloadable
       const canDownload = !isInstalling && runtimeCanInstall && selected.downloadable && disk.fits !== false
       const requiresGemmaTerms = String(selected.model || '').toLowerCase().includes('gemma')
@@ -83,7 +86,7 @@
               Chức năng dịch này miễn phí và riêng tư vì model AI chạy trực tiếp trên máy tính của bạn.
             </div>
             <div class="zadark-local-translate-dialog__text">
-              ZaDark cần tải khoảng <strong>${formatBytes(downloadBytes)}</strong> dữ liệu AI. Ổ đĩa này sẽ dùng thêm khoảng <strong>${modelPercent}%</strong> dung lượng.
+              ZaDark cần tải khoảng <strong>${formatBytes(downloadBytes)}</strong>. Ổ đĩa hiện còn <strong>${formatBytes(freeBytes)}</strong>, sau khi tải còn khoảng <strong>${formatBytes(freeAfterBytes)}</strong>.
             </div>
             <div class="zadark-local-translate-dialog__text">
               Model dịch dùng Google TranslateGemma và có điều khoản sử dụng riêng.
@@ -100,8 +103,8 @@
                 <div class="zadark-local-translate-dialog__bar-model" style="left: ${modelLeft}%; width: ${modelWidth}%"></div>
               </div>
               <div class="zadark-local-translate-dialog__disk-meta">
-                <span>Còn trống: ${formatBytes(freeBytes)}</span>
-                <span>Dữ liệu AI: ${formatBytes(downloadBytes)}</span>
+                <span>Model AI: ${formatBytes(downloadBytes)}</span>
+                <span>Còn lại sau tải: ${formatBytes(freeAfterBytes)}</span>
               </div>
             </div>
             <div class="zadark-local-translate-dialog__error"></div>
@@ -161,16 +164,11 @@
         $button.prop('disabled', true).text('Đang tải...')
         $dialog.find('[data-action="cancel"]').prop('disabled', true)
         $error.text('')
-        pollInstallProgress($button)
-        try {
-          await installLocalTranslateModel(selected.id, acceptedGemmaTerms)
-          finish(true)
-        } catch (error) {
-          if (pollTimer) clearInterval(pollTimer)
-          $button.prop('disabled', false).text('Đồng ý và tải')
-          $dialog.find('[data-action="cancel"]').prop('disabled', false)
-          $error.text(error.message)
-        }
+        localTranslateNotReadyMessage = 'ZaDark đang tải model dịch trong nền. Bạn có thể tiếp tục dùng Zalo.'
+        installLocalTranslateModel(selected.id, acceptedGemmaTerms).catch(() => {})
+        $button.text('Đang tải trong nền...')
+        $error.text('ZaDark đang tải model trong nền. Bạn có thể tiếp tục dùng Zalo.')
+        setTimeout(() => finish(false), 1200)
       })
 
       $('body').append($dialog)
@@ -182,6 +180,12 @@
     if (!isLocalTranslate()) return true
 
     const status = await getLocalTranslateStatus()
+    if (status.selected && status.selected.installing) {
+      const progress = status.selected.installProgress || {}
+      localTranslateNotReadyMessage = `ZaDark đang tải model dịch trong nền${progress.percent ? `: ${progress.percent}%` : ''}. Bạn có thể tiếp tục dùng Zalo.`
+      return false
+    }
+
     if (status.selected && status.selected.installed) {
       if (status.selected.runtimeAvailable === false) {
         if (status.selected.runtimeDownloadable) return showLocalTranslateSetup(status)
@@ -190,6 +194,7 @@
       return true
     }
 
+    localTranslateNotReadyMessage = 'Bạn chưa tải model AI'
     return showLocalTranslateSetup(status)
   }
 
@@ -199,7 +204,7 @@
       if (!isReady) {
         return {
           success: false,
-          message: 'Bạn chưa tải model AI'
+          message: localTranslateNotReadyMessage
         }
       }
 

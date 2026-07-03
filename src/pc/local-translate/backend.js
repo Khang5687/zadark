@@ -26,6 +26,7 @@ const RUNTIME_STATUS_TTL_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_
 const state = {
   child: null,
   variant: null,
+  storagePath: null,
   lastError: '',
   lastUsedAt: null,
   idleTimer: null
@@ -322,8 +323,11 @@ function directorySize (targetPath) {
   }, 0)
 }
 
-function isVariantRunning (variant) {
-  return !!state.child && state.variant && state.variant.id === variant.id
+function isVariantRunning (variant, storagePath) {
+  return !!state.child &&
+    state.variant &&
+    state.variant.id === variant.id &&
+    state.storagePath === storageRoot(storagePath)
 }
 
 function variantStatus (variant, storagePath) {
@@ -346,7 +350,7 @@ function variantStatus (variant, storagePath) {
     downloadable: isSnapshot || !!variant.modelUrl,
     disk: getDiskInfo(root, estimatedBytes),
     usedBytes: directorySize(modelDir),
-    running: isVariantRunning(variant),
+    running: isVariantRunning(variant, root),
     installing: !!installProgress,
     installProgress,
     runtimeAvailable: runtime.available,
@@ -568,17 +572,20 @@ function startRuntime (variant, storagePath) {
     detached: false
   })
   state.variant = variant
+  state.storagePath = storageRoot(storagePath)
   state.lastError = ''
   state.child.on('error', (error) => {
     state.lastError = error.message
     clearIdleTimer()
     state.child = null
     state.variant = null
+    state.storagePath = null
   })
   state.child.on('exit', () => {
     clearIdleTimer()
     state.child = null
     state.variant = null
+    state.storagePath = null
   })
 }
 
@@ -604,6 +611,7 @@ function stopRuntime () {
   state.child.kill()
   state.child = null
   state.variant = null
+  state.storagePath = null
 }
 
 function deleteVariantModel (variant, storagePath) {

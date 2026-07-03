@@ -242,6 +242,7 @@ describe('local translate backend', () => {
       backend.startRuntime(active, tempDir)
       expect(backend.variantStatus(active, tempDir).running).toBe(true)
       expect(backend.variantStatus(inactive, tempDir).running).toBe(false)
+      expect(backend.variantStatus(active, path.join(tempDir, 'other-model-root')).running).toBe(false)
     } finally {
       backend.stopRuntime()
     }

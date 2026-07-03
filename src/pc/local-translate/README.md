@@ -44,6 +44,10 @@ cannot silently replace an installed model.
 The llama.cpp variant uses `llama-chat-template.jinja` so `source: "auto"` and
 bounded conversation context work without changing the downloaded GGUF.
 
+On Apple Silicon, ZaDark uses an existing MLX runtime when available and
+otherwise installs the official llama.cpp Metal runtime. End users do not need
+Python, `uv`, or a separate server application.
+
 Runtime binaries are separate from model files. ZaDark looks for runtimes in
 its writable data directory first, then falls back to commands already on PATH:
 

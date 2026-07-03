@@ -20,6 +20,25 @@
       "baseUrl": "http://127.0.0.1:{port}/v1"
     },
     {
+      "id": "macos-arm64-llamacpp-translategemma-4b-q4",
+      "platform": "darwin",
+      "arch": "arm64",
+      "accelerator": "metal",
+      "runtime": "llama.cpp-metal",
+      "model": "translategemma-4b-it",
+      "modelRef": "translategemma-4b-it.Q4_K_S.gguf",
+      "modelUrl": "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/35a7486e128b19642cdc72d7b91b21ba388aaf42/translategemma-4b-it.Q4_K_S.gguf",
+      "sha256": "95c62e1c29f977c84fe5a5d9602a91213fd03a2c7b63f2884abab2ed7b5c5f57",
+      "estimatedBytes": 2377945600,
+      "serverCommand": "llama-server",
+      "runtimeCandidates": ["{runtimeDir}/llama-b9867/llama-server", "llama-server"],
+      "runtimeArchiveUrl": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/llama-b9867-bin-macos-arm64.tar.gz",
+      "runtimeArchiveSha256": "8614dce043dcf54150185c6568c0fa092f8cfd2944617aac305e70a8ce1027e3",
+      "runtimeEstimatedBytes": 28020736,
+      "serverArgs": ["-m", "{modelPath}", "--port", "{port}", "-c", "2048", "-ngl", "99", "--jinja", "--chat-template-file", "{backendDir}/llama-chat-template.jinja"],
+      "baseUrl": "http://127.0.0.1:{port}/v1"
+    },
+    {
       "id": "desktop-llamacpp-translategemma-4b-q4",
       "platform": "*",
       "arch": "*",

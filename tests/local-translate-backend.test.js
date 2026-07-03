@@ -265,6 +265,60 @@ describe('local translate backend', () => {
     expect(runtime).toBe(process.execPath)
   })
 
+  it('falls back to a downloadable runtime when the best hardware variant is unavailable', () => {
+    const hardware = backend.detectHardware()
+    const selected = backend.selectVariant({
+      variants: [
+        {
+          id: 'unavailable-best',
+          platform: hardware.platform,
+          arch: hardware.arch,
+          accelerator: hardware.accelerator,
+          runtime: 'test',
+          serverCommand: '__zadark_missing_runtime__'
+        },
+        {
+          id: 'downloadable-fallback',
+          platform: '*',
+          arch: '*',
+          accelerator: 'cpu',
+          runtime: 'test',
+          serverCommand: '__zadark_missing_runtime__',
+          runtimeArchiveUrl: 'https://example.com/runtime.tar'
+        }
+      ]
+    })
+
+    expect(selected.id).toBe('downloadable-fallback')
+  })
+
+  it('never selects a downloadable runtime for another platform', () => {
+    const hardware = backend.detectHardware()
+    const selected = backend.selectVariant({
+      variants: [
+        {
+          id: 'compatible',
+          platform: '*',
+          arch: '*',
+          accelerator: 'cpu',
+          runtime: 'test',
+          serverCommand: '__zadark_missing_runtime__'
+        },
+        {
+          id: 'wrong-platform',
+          platform: hardware.platform === 'darwin' ? 'win32' : 'darwin',
+          arch: hardware.arch,
+          accelerator: hardware.accelerator,
+          runtime: 'test',
+          serverCommand: '__zadark_missing_runtime__',
+          runtimeArchiveUrl: 'https://example.com/runtime.tar'
+        }
+      ]
+    })
+
+    expect(selected.id).toBe('compatible')
+  })
+
   it('caches runtime readiness checks briefly', () => {
     const runtimePath = path.join(tempDir, 'fake-mlx-runtime')
     const callsPath = path.join(tempDir, 'fake-mlx-runtime-calls')

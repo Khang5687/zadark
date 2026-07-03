@@ -326,9 +326,16 @@ function selectVariant (manifest, requestedId) {
   }
 
   const hardware = detectHardware()
-  return manifest.variants
+  const ranked = manifest.variants
     .slice()
-    .sort((a, b) => scoreVariant(b, hardware) - scoreVariant(a, hardware))[0]
+    .sort((a, b) => scoreVariant(b, hardware) - scoreVariant(a, hardware))
+  const compatible = ranked.filter((variant) => {
+    return (variant.platform === '*' || variant.platform === hardware.platform) &&
+      (variant.arch === '*' || variant.arch === hardware.arch)
+  })
+  return compatible.find((variant) => runtimeStatus(variant).available || isRuntimeDownloadable(variant)) ||
+    compatible[0] ||
+    ranked[0]
 }
 
 function storageRoot (storagePath) {
@@ -413,7 +420,7 @@ function variantStatus (variant, storagePath) {
     modelPath,
     installed: isSnapshot ? snapshotInstalled(variant, root) : !!variant.modelUrl && fs.existsSync(modelPath),
     downloadable: isSnapshot || !!variant.modelUrl,
-    runtimeDownloadable: (!!variant.runtimeUrl && !!runtimeArtifactPathFor(variant)) || !!variant.runtimeArchiveUrl,
+    runtimeDownloadable: isRuntimeDownloadable(variant),
     disk: getDiskInfo(root, downloadEstimatedBytes),
     usedBytes: directorySize(modelDir),
     running: isVariantRunning(variant, root),
@@ -426,6 +433,10 @@ function variantStatus (variant, storagePath) {
     lastUsedAt: state.lastUsedAt,
     lastError: state.lastError
   }
+}
+
+function isRuntimeDownloadable (variant) {
+  return (!!variant.runtimeUrl && !!runtimeArtifactPathFor(variant)) || !!variant.runtimeArchiveUrl
 }
 
 function hfEndpoint () {
@@ -616,6 +627,7 @@ async function installRuntimeVariant (variant, onProgress) {
     extractRuntimeArchive(archivePath)
     const runtimePath = runtimeArtifactPathFor(variant)
     if (runtimePath && fs.existsSync(runtimePath) && os.platform() !== 'win32') fs.chmodSync(runtimePath, 0o755)
+    fs.rmSync(archivePath, { force: true })
     runtimeStatusCache.delete(runtimeStatusCacheKey(variant))
     return { ...result, bytes }
   }

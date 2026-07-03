@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "defaultModel": "translategemma-4b-it",
+  "variants": [
+    {
+      "id": "macos-arm64-mlx-translategemma-4b-q4",
+      "platform": "darwin",
+      "arch": "arm64",
+      "accelerator": "mlx",
+      "runtime": "mlx",
+      "model": "translategemma-4b-it",
+      "modelRef": "mlx-community/translategemma-4b-it-4bit_immersive-translate",
+      "modelUrl": "",
+      "sha256": "",
+      "estimatedBytes": 2147483648,
+      "serverCommand": "python3",
+      "serverArgs": ["-m", "mlx_lm.server", "--model", "{modelRef}", "--port", "{port}"],
+      "baseUrl": "http://127.0.0.1:{port}/v1"
+    },
+    {
+      "id": "desktop-llamacpp-translategemma-4b-q4",
+      "platform": "*",
+      "arch": "*",
+      "accelerator": "cpu",
+      "runtime": "llama.cpp",
+      "model": "translategemma-4b-it",
+      "modelRef": "translategemma-4b-it-q4.gguf",
+      "modelUrl": "",
+      "sha256": "",
+      "estimatedBytes": 2147483648,
+      "serverCommand": "llama-server",
+      "serverArgs": ["-m", "{modelPath}", "--port", "{port}", "-c", "2048"],
+      "baseUrl": "http://127.0.0.1:{port}/v1"
+    }
+  ]
+}

@@ -24,6 +24,7 @@
     "dist": "gulp dist",
     "dist:web": "gulp distWeb",
     "dist:pc": "gulp distPC",
+    "local-translate": "node src/pc/local-translate/backend.js",
     "pc:dev": "NODE_ENV=development node build/pc",
     "pc:start": "NODE_ENV=production node build/pc",
     "prepare": "husky install",

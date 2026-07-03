@@ -628,14 +628,14 @@ function buildTranslationMessages (body) {
   const source = body.source || 'auto'
   const target = body.target || 'vi'
   const context = normalizeContext(body.context)
-  const contextText = context.length
-    ? `Context:\n${context.map((line) => `- ${line}`).join('\n')}\n\n`
-    : ''
-
   return [
+    ...context.map((line) => ({
+      role: 'user',
+      content: `Previous chat context, do not translate this line: ${line}`
+    })),
     {
       role: 'user',
-      content: `<<<source>>>${source}<<<target>>>${target}<<<text>>>${contextText}${body.text || ''}`
+      content: `<<<source>>>${source}<<<target>>>${target}<<<text>>>${body.text || ''}`
     }
   ]
 }

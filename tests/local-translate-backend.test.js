@@ -149,7 +149,7 @@ describe('local translate backend', () => {
     expect(disk.freeBytes).toBe(61440)
   })
 
-  it('caps context and uses TranslateGemma prompt markers', () => {
+  it('caps context separately from TranslateGemma marker text', () => {
     const messages = backend.buildTranslationMessages({
       text: 'hello',
       source: 'en',
@@ -157,10 +157,11 @@ describe('local translate backend', () => {
       context: Array.from({ length: 20 }, (_, i) => `message ${i}`)
     })
 
-    expect(messages).toHaveLength(1)
-    expect(messages[0].content).toContain('<<<source>>>en<<<target>>>vi<<<text>>>')
+    expect(messages).toHaveLength(11)
     expect(messages[0].content).not.toContain('message 0')
-    expect(messages[0].content).toContain('message 19')
+    expect(messages[0].content).toContain('message 10')
+    expect(messages[9].content).toContain('message 19')
+    expect(messages[10].content).toBe('<<<source>>>en<<<target>>>vi<<<text>>>hello')
   })
 
   it('reports selected model, disk info, and storage path', async () => {

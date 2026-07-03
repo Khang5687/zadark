@@ -88,6 +88,12 @@ describe('local translate backend', () => {
         return
       }
 
+      if (req.url.startsWith('/api/models/empty/model/tree/main')) {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify([]))
+        return
+      }
+
       if (req.url.startsWith('/api/models/slow/model/tree/main') ||
         req.url.startsWith('/api/models/mlx-community/translategemma-4b-it-4bit_immersive-translate/tree/main')) {
         const model = 'slow model'
@@ -369,6 +375,29 @@ describe('local translate backend', () => {
     }
 
     await expect(backend.installVariant(variant, tempDir)).rejects.toThrow('Not enough disk space for model')
+  })
+
+  it('rejects empty Hugging Face snapshots', async () => {
+    const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
+    process.env.ZADARK_HF_ENDPOINT = hfBaseUrl
+
+    try {
+      const variant = {
+        id: 'empty-hf-snapshot',
+        runtime: 'mlx',
+        modelRef: 'empty/model',
+        downloadKind: 'hf-snapshot',
+        revision: 'main'
+      }
+
+      await expect(backend.installVariant(variant, tempDir)).rejects.toThrow('Hugging Face snapshot did not include any files')
+    } finally {
+      if (previousEndpoint) {
+        process.env.ZADARK_HF_ENDPOINT = previousEndpoint
+      } else {
+        delete process.env.ZADARK_HF_ENDPOINT
+      }
+    }
   })
 
   it('reports install progress while a snapshot download is running', async () => {

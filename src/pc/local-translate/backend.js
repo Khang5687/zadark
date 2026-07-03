@@ -464,6 +464,7 @@ async function downloadHuggingFaceSnapshot (variant, storagePath, onProgress) {
   if (!Array.isArray(files)) throw new Error('Hugging Face tree response was not a file list')
 
   const modelFiles = files.filter((file) => file && file.type === 'file' && file.path)
+  if (!modelFiles.length) throw new Error('Hugging Face snapshot did not include any files')
   const totalBytes = modelFiles.reduce((total, file) => total + (file.size || 0), 0)
   fs.mkdirSync(modelDir, { recursive: true })
   let bytes = 0

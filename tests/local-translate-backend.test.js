@@ -188,6 +188,23 @@ describe('local translate backend', () => {
     expect(runtime).toBe(process.execPath)
   })
 
+  it('caches runtime readiness checks briefly', () => {
+    const runtimePath = path.join(tempDir, 'fake-mlx-runtime')
+    const callsPath = path.join(tempDir, 'fake-mlx-runtime-calls')
+    fs.writeFileSync(runtimePath, `#!/bin/sh\necho call >> ${JSON.stringify(callsPath)}\n`)
+    fs.chmodSync(runtimePath, 0o755)
+
+    const variant = {
+      id: 'cached-runtime-test',
+      runtime: 'mlx',
+      serverCommand: runtimePath
+    }
+
+    expect(backend.runtimeStatus(variant).available).toBe(true)
+    expect(backend.runtimeStatus(variant).available).toBe(true)
+    expect(fs.readFileSync(callsPath, 'utf8').trim().split(/\r?\n/)).toHaveLength(1)
+  })
+
   it('caches repeated local translation responses by text, target, and context', async () => {
     const previousMock = process.env.ZADARK_LOCAL_TRANSLATE_MOCK
     process.env.ZADARK_LOCAL_TRANSLATE_MOCK = '1'

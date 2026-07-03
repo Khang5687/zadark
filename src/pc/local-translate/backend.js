@@ -21,6 +21,7 @@ const DEFAULT_STORAGE_DIR = process.env.ZADARK_LOCAL_TRANSLATE_STORAGE_DIR || DA
 const IDLE_TIMEOUT_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_IDLE_MS || 15 * 60 * 1000)
 const HF_DEFAULT_ENDPOINT = 'https://huggingface.co'
 const RUNTIME_DIR = process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_DIR || path.join(__dirname, 'runtimes')
+const RUNTIME_STATUS_TTL_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_STATUS_TTL_MS || 30 * 1000)
 
 const state = {
   child: null,
@@ -31,6 +32,7 @@ const state = {
 }
 const installs = new Map()
 const translationCache = new Map()
+const runtimeStatusCache = new Map()
 
 function json (res, status, body) {
   res.writeHead(status, {
@@ -161,7 +163,16 @@ function resolveRuntimeCommand (variant) {
   return ''
 }
 
-function runtimeStatus (variant) {
+function runtimeStatusCacheKey (variant) {
+  return JSON.stringify({
+    id: variant.id || '',
+    runtime: variant.runtime || '',
+    serverCommand: variant.serverCommand || '',
+    runtimeCandidates: variant.runtimeCandidates || []
+  })
+}
+
+function checkRuntimeStatus (variant) {
   if (!variant.serverCommand && (!variant.runtimeCandidates || !variant.runtimeCandidates.length)) {
     return { available: false, message: 'Runtime command is not configured' }
   }
@@ -180,6 +191,16 @@ function runtimeStatus (variant) {
   }
 
   return { available: true, command, message: '' }
+}
+
+function runtimeStatus (variant) {
+  const key = runtimeStatusCacheKey(variant)
+  const cached = runtimeStatusCache.get(key)
+  if (cached && Date.now() - cached.checkedAt < RUNTIME_STATUS_TTL_MS) return cached.value
+
+  const value = checkRuntimeStatus(variant)
+  runtimeStatusCache.set(key, { checkedAt: Date.now(), value })
+  return value
 }
 
 function detectHardware () {

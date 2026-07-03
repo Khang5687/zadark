@@ -54,7 +54,7 @@ function corsHeaders (req) {
   const origin = req.headers.origin
   return {
     'Content-Type': 'application/json',
-    ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}),
+    ...(origin && isAllowedOrigin(origin) ? { 'Access-Control-Allow-Origin': origin } : {}),
     'Access-Control-Allow-Headers': 'content-type',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
   }

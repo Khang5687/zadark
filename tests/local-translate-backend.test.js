@@ -13,7 +13,7 @@ function requestJson (baseUrl, pathname, headers = {}) {
       res.on('data', (chunk) => { raw += chunk })
       res.on('end', () => {
         try {
-          resolve({ status: res.statusCode, body: JSON.parse(raw) })
+          resolve({ status: res.statusCode, headers: res.headers, body: JSON.parse(raw) })
         } catch (error) {
           reject(error)
         }
@@ -180,6 +180,7 @@ describe('local translate backend', () => {
     })
 
     expect(result.status).toBe(403)
+    expect(result.headers['access-control-allow-origin']).toBeUndefined()
     expect(result.body.message).toBe('Origin is not allowed')
   })
 

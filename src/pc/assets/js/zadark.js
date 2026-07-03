@@ -78,7 +78,7 @@
   const ZADARK_TRANSLATE_TARGET_KEY = '@ZaDark:TRANSLATE_TARGET'
   const ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY = '@ZaDark:LOCAL_TRANSLATE_STORAGE_PATH'
   const ZADARK_THREAD_CHAT_BG_KEY = 'THREAD_CHAT_BG' // localforage key
-  const ZADARK_LOCAL_TRANSLATE_API_URL = window.ZADARK_LOCAL_TRANSLATE_API_URL || 'http://127.0.0.1:5555/v1'
+  const getLocalTranslateApiUrl = () => window.ZADARK_LOCAL_TRANSLATE_API_URL || 'http://127.0.0.1:5555/v1'
 
   const ZADARK_ENABLED_HIDE_LATEST_MESSAGE_KEY = '@ZaDark:ENABLED_HIDE_LATEST_MESSAGE'
   const ZADARK_ENABLED_HIDE_CONV_AVATAR_KEY = '@ZaDark:ENABLED_HIDE_CONV_AVATAR'
@@ -1443,7 +1443,7 @@
   const getLocalTranslateStatus = async () => {
     const storagePath = ZaDarkStorage.getLocalTranslateStoragePath()
     const query = storagePath ? `?storagePath=${encodeURIComponent(storagePath)}` : ''
-    const res = await fetch(`${ZADARK_LOCAL_TRANSLATE_API_URL}/local-translate/status${query}`)
+    const res = await fetch(`${getLocalTranslateApiUrl()}/local-translate/status${query}`)
     const json = await res.json()
     if (!res.ok) {
       throw new Error(json.message || 'Không thể kiểm tra model dịch')
@@ -1452,7 +1452,7 @@
   }
 
   const deleteLocalTranslateModel = async (variantId) => {
-    const res = await fetch(`${ZADARK_LOCAL_TRANSLATE_API_URL}/local-translate/delete-model`, {
+    const res = await fetch(`${getLocalTranslateApiUrl()}/local-translate/delete-model`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

@@ -5,10 +5,16 @@
 
 /* eslint-disable node/no-callback-literal  */
 
-const { app, session } = require('electron')
+const { app, BrowserWindow, session } = require('electron')
 const http = require('http')
 
 const LOCAL_TRANSLATE_PORT = 5555
+let localTranslateApiUrl = `http://127.0.0.1:${LOCAL_TRANSLATE_PORT}/v1`
+
+function injectLocalTranslateApiUrl (window) {
+  if (!window || window.isDestroyed()) return
+  window.webContents.executeJavaScript(`window.ZADARK_LOCAL_TRANSLATE_API_URL=${JSON.stringify(localTranslateApiUrl)};`).catch(() => {})
+}
 
 function startLocalTranslateBackend () {
   let isListening = false
@@ -19,13 +25,21 @@ function startLocalTranslateBackend () {
     const server = http.createServer(localTranslate.route)
 
     server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        server.listen(0, '127.0.0.1')
+        return
+      }
       if (DEBUG) console.log('ZaDarkPC: local translate backend error', error.message)
     })
 
-    server.listen(LOCAL_TRANSLATE_PORT, '127.0.0.1', () => {
+    server.on('listening', () => {
       isListening = true
-      if (DEBUG) console.log(`ZaDarkPC: local translate backend listening on ${LOCAL_TRANSLATE_PORT}`)
+      localTranslateApiUrl = `http://127.0.0.1:${server.address().port}/v1`
+      BrowserWindow.getAllWindows().forEach(injectLocalTranslateApiUrl)
+      if (DEBUG) console.log(`ZaDarkPC: local translate backend listening on ${localTranslateApiUrl}`)
     })
+
+    server.listen(LOCAL_TRANSLATE_PORT, '127.0.0.1')
 
     app.on('before-quit', () => {
       if (localTranslate.stopRuntime) {
@@ -85,6 +99,12 @@ const BLOCK_FILTER = {
 
 app.whenReady().then(() => {
   startLocalTranslateBackend()
+
+  app.on('browser-window-created', (event, window) => {
+    window.webContents.on('did-finish-load', () => {
+      injectLocalTranslateApiUrl(window)
+    })
+  })
 
   const _blockSettings = {
     block_typing: false,

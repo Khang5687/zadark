@@ -76,6 +76,7 @@
   const ZADARK_FONT_FAMILY_KEY = '@ZaDark:FONT_FAMILY'
   const ZADARK_FONT_SIZE_KEY = '@ZaDark:FONT_SIZE'
   const ZADARK_TRANSLATE_TARGET_KEY = '@ZaDark:TRANSLATE_TARGET'
+  const ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY = '@ZaDark:LOCAL_TRANSLATE_STORAGE_PATH'
   const ZADARK_THREAD_CHAT_BG_KEY = 'THREAD_CHAT_BG' // localforage key
   const ZADARK_LOCAL_TRANSLATE_API_URL = 'http://127.0.0.1:5555/v1'
 
@@ -239,6 +240,12 @@
     },
     getTranslateTarget: () => {
       return localStorage.getItem(ZADARK_TRANSLATE_TARGET_KEY) || 'vi'
+    },
+    saveLocalTranslateStoragePath: (storagePath) => {
+      return localStorage.setItem(ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY, storagePath)
+    },
+    getLocalTranslateStoragePath: () => {
+      return localStorage.getItem(ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY) || ''
     },
 
     /**
@@ -1329,6 +1336,7 @@
   const selectFontSizeElName = '#js-select-font-size'
   const selectTranslateTargetElName = '#js-select-translate-target'
   const localTranslateStatusElName = '#js-local-translate-status'
+  const inputLocalTranslateStoragePathElName = '#js-input-local-translate-storage-path'
   const buttonDeleteLocalTranslateModelElName = '#js-button-delete-local-translate-model'
   const inputThreadChatBgElName = '#js-input-thread-chat-bg'
   const buttonDelThreadChatBgElName = '#js-button-del-thread-chat-bg'
@@ -1433,7 +1441,9 @@
   }
 
   const getLocalTranslateStatus = async () => {
-    const res = await fetch(`${ZADARK_LOCAL_TRANSLATE_API_URL}/local-translate/status`)
+    const storagePath = ZaDarkStorage.getLocalTranslateStoragePath()
+    const query = storagePath ? `?storagePath=${encodeURIComponent(storagePath)}` : ''
+    const res = await fetch(`${ZADARK_LOCAL_TRANSLATE_API_URL}/local-translate/status${query}`)
     const json = await res.json()
     if (!res.ok) {
       throw new Error(json.message || 'Không thể kiểm tra model dịch')
@@ -1447,7 +1457,10 @@
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ variantId })
+      body: JSON.stringify({
+        variantId,
+        storagePath: ZaDarkStorage.getLocalTranslateStoragePath()
+      })
     })
     const json = await res.json()
     if (!res.ok || !json.success) {
@@ -1585,6 +1598,14 @@
             </label>
 
             <button id="js-button-delete-local-translate-model" class="btn-del" disabled>Xoá model</button>
+          </div>
+
+          <div class="font-settings font-settings--compact">
+            <label class="font-settings__label font-settings__label--muted" style="flex: 1;">
+              Thư mục model
+            </label>
+
+            <input id="js-input-local-translate-storage-path" class="zadark-input" placeholder="Mặc định">
           </div>
 
           <div class="font-settings">
@@ -2124,6 +2145,16 @@
     }
   }
 
+  const loadLocalTranslateStoragePath = () => {
+    $(inputLocalTranslateStoragePathElName).val(ZaDarkStorage.getLocalTranslateStoragePath())
+  }
+
+  const handleLocalTranslateStoragePathChange = async function () {
+    const storagePath = $(this).val().trim()
+    ZaDarkStorage.saveLocalTranslateStoragePath(storagePath)
+    await loadLocalTranslateStatus()
+  }
+
   const handleDeleteLocalTranslateModel = async function () {
     const $button = $(this)
     const variantId = $button.data('variant-id')
@@ -2267,6 +2298,12 @@
       }
     })
 
+    $(inputLocalTranslateStoragePathElName).on('blur', handleLocalTranslateStoragePathChange)
+    $(inputLocalTranslateStoragePathElName).on('keypress', function (event) {
+      const isEnter = Number(event.keyCode ? event.keyCode : event.which) - 1 === 12
+      if (isEnter) handleLocalTranslateStoragePathChange.call(this)
+    })
+
     $(buttonDeleteLocalTranslateModelElName).on('click', handleDeleteLocalTranslateModel)
 
     $(inputThreadChatBgElName).on('click', function (e) {
@@ -2390,6 +2427,7 @@
     loadKnownVersionState(buttonEl)
     loadPopupScrollEvent()
     loadTranslate()
+    loadLocalTranslateStoragePath()
     loadLocalTranslateStatus()
     loadTippy()
 

@@ -1,4 +1,6 @@
 (function ($) {
+  const ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY = '@ZaDark:LOCAL_TRANSLATE_STORAGE_PATH'
+
   const getTranslateApiURL = () => {
     if (document.body.classList.contains('zadark-pc')) {
       return 'http://127.0.0.1:5555/v1'
@@ -8,6 +10,15 @@
   }
 
   const isLocalTranslate = () => document.body.classList.contains('zadark-pc')
+
+  const getLocalTranslateStoragePath = () => {
+    return localStorage.getItem(ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY) || ''
+  }
+
+  const localTranslateStoragePayload = () => {
+    const storagePath = getLocalTranslateStoragePath()
+    return storagePath ? { storagePath } : {}
+  }
 
   const formatBytes = (bytes) => {
     if (!bytes) return '0 GB'
@@ -19,7 +30,9 @@
   const normalizeContextText = (text) => String(text || '').replace(/\s+/g, ' ').trim()
 
   const getLocalTranslateStatus = async () => {
-    const res = await fetch(getTranslateApiURL() + '/local-translate/status')
+    const storagePath = getLocalTranslateStoragePath()
+    const query = storagePath ? `?storagePath=${encodeURIComponent(storagePath)}` : ''
+    const res = await fetch(getTranslateApiURL() + '/local-translate/status' + query)
     const json = await res.json()
     if (!res.ok) {
       throw new Error(json.message || 'Không thể kiểm tra model AI')
@@ -33,7 +46,7 @@
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ variantId })
+      body: JSON.stringify({ variantId, ...localTranslateStoragePayload() })
     })
     const json = await res.json()
     if (!res.ok || !json.success) {
@@ -176,6 +189,7 @@
         body: JSON.stringify({
           text,
           target,
+          ...localTranslateStoragePayload(),
           ...(isLocalTranslate() && context.length ? { context } : {})
         })
       })

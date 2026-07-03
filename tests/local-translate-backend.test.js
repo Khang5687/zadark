@@ -22,6 +22,32 @@ function requestJson (baseUrl, pathname) {
   })
 }
 
+function postJson (baseUrl, pathname, body) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body)
+    const req = http.request(baseUrl + pathname, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      }
+    }, (res) => {
+      let raw = ''
+      res.on('data', (chunk) => { raw += chunk })
+      res.on('end', () => {
+        try {
+          resolve({ status: res.statusCode, body: JSON.parse(raw) })
+        } catch (error) {
+          reject(error)
+        }
+      })
+    })
+    req.on('error', reject)
+    req.write(data)
+    req.end()
+  })
+}
+
 describe('local translate backend', () => {
   let server
   let baseUrl
@@ -132,6 +158,35 @@ describe('local translate backend', () => {
     })
 
     expect(runtime).toBe(process.execPath)
+  })
+
+  it('caches repeated local translation responses by text, target, and context', async () => {
+    const previousMock = process.env.ZADARK_LOCAL_TRANSLATE_MOCK
+    process.env.ZADARK_LOCAL_TRANSLATE_MOCK = '1'
+
+    try {
+      const body = {
+        variantId: 'desktop-llamacpp-translategemma-4b-q4',
+        text: 'cache me',
+        target: 'vi',
+        context: ['previous']
+      }
+
+      const first = await postJson(baseUrl, '/v1/translate', body)
+      const second = await postJson(baseUrl, '/v1/translate', body)
+      const differentContext = await postJson(baseUrl, '/v1/translate', { ...body, context: ['other'] })
+
+      expect(first.status).toBe(200)
+      expect(first.body.cached).toBeUndefined()
+      expect(second.body.cached).toBe(true)
+      expect(differentContext.body.cached).toBeUndefined()
+    } finally {
+      if (previousMock) {
+        process.env.ZADARK_LOCAL_TRANSLATE_MOCK = previousMock
+      } else {
+        delete process.env.ZADARK_LOCAL_TRANSLATE_MOCK
+      }
+    }
   })
 
   it('downloads Hugging Face snapshot variants without external tools', async () => {

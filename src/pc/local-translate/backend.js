@@ -15,6 +15,7 @@ const DATA_DIR = process.env.ZADARK_LOCAL_TRANSLATE_DIR || path.join(os.homedir(
 const MAX_BODY_BYTES = 1024 * 1024
 const MAX_CONTEXT_ITEMS = 10
 const MAX_CONTEXT_CHARS = 4000
+const TRANSLATION_CACHE_LIMIT = 100
 const MANIFEST_PATH = process.env.ZADARK_LOCAL_TRANSLATE_MANIFEST || path.join(__dirname, 'model-manifest.json')
 const DEFAULT_STORAGE_DIR = process.env.ZADARK_LOCAL_TRANSLATE_STORAGE_DIR || DATA_DIR
 const IDLE_TIMEOUT_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_IDLE_MS || 15 * 60 * 1000)
@@ -28,6 +29,7 @@ const state = {
   lastUsedAt: null,
   idleTimer: null
 }
+const translationCache = new Map()
 
 function json (res, status, body) {
   res.writeHead(status, {
@@ -525,6 +527,33 @@ function buildTranslationMessages (body) {
   ]
 }
 
+function translationCacheKey (variant, body) {
+  return JSON.stringify({
+    variant: variant.id,
+    source: body.source || 'auto',
+    target: body.target || 'vi',
+    text: body.text || '',
+    context: normalizeContext(body.context)
+  })
+}
+
+function getCachedTranslation (key) {
+  if (!translationCache.has(key)) return null
+
+  const value = translationCache.get(key)
+  translationCache.delete(key)
+  translationCache.set(key, value)
+  return value
+}
+
+function setCachedTranslation (key, value) {
+  translationCache.set(key, value)
+  if (translationCache.size <= TRANSLATION_CACHE_LIMIT) return
+
+  const oldestKey = translationCache.keys().next().value
+  translationCache.delete(oldestKey)
+}
+
 function postJson (url, body) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url)
@@ -585,17 +614,23 @@ async function translate (body) {
   if (!body.text) throw new Error('Missing text')
   if (!body.target) throw new Error('Missing target')
 
+  const manifest = loadManifest()
+  const variant = state.variant || selectVariant(manifest, body.variantId)
+  const cacheKey = translationCacheKey(variant, body)
+  const cached = getCachedTranslation(cacheKey)
+  if (cached) return { ...cached, cached: true }
+
   if (process.env.ZADARK_LOCAL_TRANSLATE_MOCK === '1') {
-    return {
+    const result = {
       success: true,
       languageName: body.source || 'Auto',
       translation: `[${body.target}] ${body.text}`,
       model: 'mock'
     }
+    setCachedTranslation(cacheKey, result)
+    return result
   }
 
-  const manifest = loadManifest()
-  const variant = state.variant || selectVariant(manifest, body.variantId)
   const root = storageRoot(body.storagePath)
   startRuntime(variant, root)
 
@@ -617,12 +652,14 @@ async function translate (body) {
 
   scheduleIdleStop()
 
-  return {
+  const result = {
     success: true,
     languageName: body.source || 'Auto',
     translation: translation.trim(),
     model: variant.id
   }
+  setCachedTranslation(cacheKey, result)
+  return result
 }
 
 async function route (req, res) {
@@ -688,6 +725,7 @@ function selfCheck () {
   assert(variantStatus(selectVariant(manifest, 'macos-arm64-mlx-translategemma-4b-q4'), os.tmpdir()).downloadable)
   assert(!runtimeStatus({ serverCommand: '__zadark_missing_runtime__' }).available)
   assert(resolveRuntimeCommand({ runtimeCandidates: [process.execPath] }) === process.execPath)
+  assert(translationCacheKey({ id: 'v' }, { text: 'hello', target: 'vi', context: ['a'] }).includes('"context":["a"]'))
   assert(normalizeContext(Array.from({ length: 20 }, (_, i) => `msg ${i}`)).length === 10)
   assert(buildTranslationMessages({ text: 'hello', source: 'en', target: 'vi', context: ['previous'] })[0].content.includes('previous'))
   assert(parseDfOutput('Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/disk 100 40 60 40% /tmp').freeBytes === 61440)

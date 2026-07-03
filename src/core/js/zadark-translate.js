@@ -3,7 +3,7 @@
 
   const getTranslateApiURL = () => {
     if (document.body.classList.contains('zadark-pc')) {
-      return 'http://127.0.0.1:5555/v1'
+      return window.ZADARK_LOCAL_TRANSLATE_API_URL || 'http://127.0.0.1:5555/v1'
     }
 
     return ZADARK_API_URL

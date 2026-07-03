@@ -225,6 +225,11 @@ const writeIndexFile = (zaloDir) => {
     },
     {
       where: 'beforeend',
+      html: '<script>window.ZADARK_LOCAL_TRANSLATE_API_URL="http://127.0.0.1:5555/v1";</script>',
+      htmlElement: bodyElement
+    },
+    {
+      where: 'beforeend',
       html: '<script src="zadark/js/zadark-translate.min.js"></script>',
       htmlElement: bodyElement
     },

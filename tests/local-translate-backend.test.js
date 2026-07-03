@@ -59,6 +59,7 @@ describe('local translate backend', () => {
   let hfServer
   let hfBaseUrl
   let releaseSlowDownload
+  let testModelDownloadCount
 
   beforeAll(async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zadark-local-translate-'))
@@ -66,6 +67,7 @@ describe('local translate backend', () => {
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
     const address = server.address()
     baseUrl = `http://127.0.0.1:${address.port}`
+    testModelDownloadCount = 0
 
     hfServer = http.createServer((req, res) => {
       if (req.url.startsWith('/api/models/test/model/tree/main')) {
@@ -122,6 +124,7 @@ describe('local translate backend', () => {
       }
 
       if (req.url === '/test/model/resolve/main/model.safetensors') {
+        testModelDownloadCount += 1
         res.writeHead(200)
         res.end('tiny model')
         return
@@ -327,6 +330,7 @@ describe('local translate backend', () => {
   it('downloads Hugging Face snapshot variants without external tools', async () => {
     const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
     process.env.ZADARK_HF_ENDPOINT = hfBaseUrl
+    testModelDownloadCount = 0
 
     try {
       const variant = {
@@ -351,6 +355,11 @@ describe('local translate backend', () => {
 
       const second = await backend.installVariant(variant, tempDir)
       expect(second.alreadyInstalled).toBe(true)
+
+      fs.rmSync(path.join(installed.path, '.snapshot-complete.json'))
+      const repaired = await backend.installVariant(variant, tempDir)
+      expect(repaired.files).toBe(2)
+      expect(testModelDownloadCount).toBe(1)
 
       fs.rmSync(path.join(installed.path, 'model.safetensors'))
       const afterManualDelete = backend.variantStatus(variant, tempDir)

@@ -452,6 +452,16 @@ function downloadFile (url, destPath, expectedSha256, onProgress) {
   })
 }
 
+function fileSha256 (filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256')
+    const stream = fs.createReadStream(filePath)
+    stream.on('data', (chunk) => hash.update(chunk))
+    stream.on('end', () => resolve(hash.digest('hex')))
+    stream.on('error', reject)
+  })
+}
+
 async function downloadHuggingFaceSnapshot (variant, storagePath, onProgress) {
   const modelDir = modelDirFor(variant, storagePath)
   const markerPath = snapshotMarkerFor(variant, storagePath)
@@ -475,10 +485,17 @@ async function downloadHuggingFaceSnapshot (variant, storagePath, onProgress) {
       throw new Error(`Refusing unsafe model path: ${file.path}`)
     }
 
+    const expectedSha256 = file.lfs && file.lfs.oid
+    if (expectedSha256 && fs.existsSync(destPath) && await fileSha256(destPath) === expectedSha256) {
+      bytes += file.size || fs.statSync(destPath).size
+      if (onProgress) onProgress(bytes, totalBytes, file.path)
+      continue
+    }
+
     await downloadFile(
       hfResolveUrl(variant.modelRef, revision, file.path),
       destPath,
-      file.lfs && file.lfs.oid,
+      expectedSha256,
       (chunkBytes) => {
         bytes += chunkBytes
         if (onProgress) onProgress(bytes, totalBytes, file.path)

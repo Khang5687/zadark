@@ -1,4 +1,5 @@
 const fs = require('fs')
+const childProcess = require('child_process')
 const crypto = require('crypto')
 const http = require('http')
 const os = require('os')
@@ -60,9 +61,20 @@ describe('local translate backend', () => {
   let hfBaseUrl
   let releaseSlowDownload
   let testModelDownloadCount
+  let runtimeArchivePath
+  let runtimeArchiveSha256
 
   beforeAll(async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zadark-local-translate-'))
+    const archiveRoot = path.join(tempDir, 'runtime-archive-root')
+    const archiveRuntimeBin = path.join(archiveRoot, 'archive-runtime', 'bin')
+    runtimeArchivePath = path.join(tempDir, 'archive-runtime.tar')
+    fs.mkdirSync(archiveRuntimeBin, { recursive: true })
+    fs.writeFileSync(path.join(archiveRuntimeBin, 'fake-server'), '#!/bin/sh\nexit 0\n')
+    fs.chmodSync(path.join(archiveRuntimeBin, 'fake-server'), 0o755)
+    childProcess.execFileSync('tar', ['-cf', runtimeArchivePath, '-C', archiveRoot, 'archive-runtime'])
+    runtimeArchiveSha256 = crypto.createHash('sha256').update(fs.readFileSync(runtimeArchivePath)).digest('hex')
+
     server = http.createServer(backend.route)
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
     const address = server.address()
@@ -126,6 +138,12 @@ describe('local translate backend', () => {
       if (req.url === '/runtime/fake-server') {
         res.writeHead(200)
         res.end('#!/bin/sh\nexit 0\n')
+        return
+      }
+
+      if (req.url === '/runtime/archive-runtime.tar') {
+        res.writeHead(200)
+        fs.createReadStream(runtimeArchivePath).pipe(res)
         return
       }
 
@@ -424,6 +442,53 @@ describe('local translate backend', () => {
         delete process.env.ZADARK_HF_ENDPOINT
       }
     }
+  })
+
+  it('extracts a declared runtime archive before the model', async () => {
+    const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
+    process.env.ZADARK_HF_ENDPOINT = hfBaseUrl
+    const runtimeDir = path.join(__dirname, '../src/pc/local-translate/runtimes')
+    const extractedRuntimeDir = path.join(runtimeDir, 'archive-runtime')
+    const runtimeDownloadDir = path.join(runtimeDir, '.downloads')
+
+    try {
+      fs.rmSync(extractedRuntimeDir, { recursive: true, force: true })
+      fs.rmSync(runtimeDownloadDir, { recursive: true, force: true })
+      const runtimePath = path.join(extractedRuntimeDir, 'bin', 'fake-server')
+      const variant = {
+        id: 'runtime-archive-test',
+        runtime: 'test',
+        runtimeCandidates: [runtimePath],
+        runtimeArchiveUrl: `${hfBaseUrl}/runtime/archive-runtime.tar`,
+        runtimeArchiveSha256,
+        runtimeEstimatedBytes: fs.statSync(runtimeArchivePath).size,
+        modelRef: 'test/model',
+        downloadKind: 'hf-snapshot',
+        revision: 'main',
+        estimatedBytes: 10
+      }
+
+      const before = backend.variantStatus(variant, tempDir)
+      expect(before.runtimeAvailable).toBe(false)
+      expect(before.runtimeDownloadable).toBe(true)
+
+      await backend.installVariant(variant, tempDir)
+
+      expect(fs.existsSync(runtimePath)).toBe(true)
+      expect(backend.runtimeStatus(variant).available).toBe(true)
+    } finally {
+      if (previousEndpoint) {
+        process.env.ZADARK_HF_ENDPOINT = previousEndpoint
+      } else {
+        delete process.env.ZADARK_HF_ENDPOINT
+      }
+      fs.rmSync(extractedRuntimeDir, { recursive: true, force: true })
+      fs.rmSync(runtimeDownloadDir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects unsafe runtime archive paths', () => {
+    expect(() => backend.validateArchiveEntries(['runtime/bin/server', '../escape'])).toThrow('Refusing unsafe runtime archive path')
   })
 
   it('rejects model install when disk space is too low', async () => {

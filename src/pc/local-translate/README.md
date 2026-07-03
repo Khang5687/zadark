@@ -45,11 +45,14 @@ runtimes first, then falls back to commands already on PATH:
 - `runtimes/mlx-macos-arm64/bin/python3` for MLX on Apple Silicon.
 - `runtimes/llama.cpp/bin/llama-server` for llama.cpp fallback.
 
-If a variant declares a single-file runtime artifact, `/local-translate/install`
-downloads it before the model:
+If a variant declares a runtime artifact, `/local-translate/install` downloads
+it before the model:
 
 - `runtimeUrl`: artifact URL.
+- `runtimeArchiveUrl`: `.tar`/`.tar.gz` artifact URL extracted under
+  `runtimes/`.
 - `runtimeSha256`: optional checksum.
+- `runtimeArchiveSha256`: optional archive checksum.
 - `runtimeEstimatedBytes`: optional disk/progress estimate.
 - `runtimePath`: optional path under `runtimes/`; otherwise the first bundled
   runtime candidate is used.

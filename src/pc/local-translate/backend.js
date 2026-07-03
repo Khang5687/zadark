@@ -181,6 +181,12 @@ function runtimeArtifactPathFor (variant) {
     .find((candidate) => candidate.includes('/') || candidate.includes('\\')) || ''
 }
 
+function runtimeArchivePathFor (variant) {
+  const urlPath = variant.runtimeArchiveUrl ? new URL(variant.runtimeArchiveUrl).pathname : ''
+  const name = path.basename(urlPath) || `${variant.id}-runtime.tar`
+  return path.join(RUNTIME_DIR, '.downloads', name)
+}
+
 function resolveRuntimeCommand (variant) {
   const candidates = (variant.runtimeCandidates && variant.runtimeCandidates.length)
     ? variant.runtimeCandidates
@@ -192,6 +198,27 @@ function resolveRuntimeCommand (variant) {
   }
 
   return ''
+}
+
+function validateArchiveEntries (entries) {
+  const root = path.resolve(RUNTIME_DIR)
+  entries.forEach((entry) => {
+    const target = path.resolve(root, entry)
+    if (path.isAbsolute(entry) || (target !== root && !target.startsWith(root + path.sep))) {
+      throw new Error(`Refusing unsafe runtime archive path: ${entry}`)
+    }
+  })
+}
+
+function extractRuntimeArchive (archivePath) {
+  if (!commandExists('tar')) throw new Error('Runtime archive extractor is not available')
+
+  const entries = childProcess.execFileSync('tar', ['-tf', archivePath], { encoding: 'utf8' })
+    .split(/\r?\n/)
+    .filter(Boolean)
+  validateArchiveEntries(entries)
+  fs.mkdirSync(RUNTIME_DIR, { recursive: true })
+  childProcess.execFileSync('tar', ['-xf', archivePath, '-C', RUNTIME_DIR], { stdio: 'ignore' })
 }
 
 function runtimeStatusCacheKey (variant) {
@@ -361,7 +388,7 @@ function variantStatus (variant, storagePath) {
     modelPath,
     installed: isSnapshot ? snapshotInstalled(variant, root) : !!variant.modelUrl && fs.existsSync(modelPath),
     downloadable: isSnapshot || !!variant.modelUrl,
-    runtimeDownloadable: !!variant.runtimeUrl && !!runtimeArtifactPathFor(variant),
+    runtimeDownloadable: (!!variant.runtimeUrl && !!runtimeArtifactPathFor(variant)) || !!variant.runtimeArchiveUrl,
     disk: getDiskInfo(root, downloadEstimatedBytes),
     usedBytes: directorySize(modelDir),
     running: isVariantRunning(variant, root),
@@ -550,9 +577,25 @@ async function runInstallVariant (variant, storagePath, onProgress) {
 }
 
 async function installRuntimeVariant (variant, onProgress) {
-  if (!variant.runtimeUrl) return null
   const runtime = runtimeStatus(variant)
   if (runtime.available) return { path: runtime.command, alreadyInstalled: true }
+
+  if (variant.runtimeArchiveUrl) {
+    const archivePath = runtimeArchivePathFor(variant)
+    let bytes = 0
+    if (onProgress) onProgress(0, variant.runtimeEstimatedBytes || 0, path.basename(archivePath))
+    const result = await downloadFile(variant.runtimeArchiveUrl, archivePath, variant.runtimeArchiveSha256, (chunkBytes) => {
+      bytes += chunkBytes
+      if (onProgress) onProgress(bytes, variant.runtimeEstimatedBytes || 0, path.basename(archivePath))
+    })
+    extractRuntimeArchive(archivePath)
+    const runtimePath = runtimeArtifactPathFor(variant)
+    if (runtimePath && fs.existsSync(runtimePath) && os.platform() !== 'win32') fs.chmodSync(runtimePath, 0o755)
+    runtimeStatusCache.delete(runtimeStatusCacheKey(variant))
+    return { ...result, bytes }
+  }
+
+  if (!variant.runtimeUrl) return null
 
   const runtimePath = runtimeArtifactPathFor(variant)
   if (!runtimePath) throw new Error(`Variant ${variant.id} has no bundled runtime path`)
@@ -944,6 +987,7 @@ function selfCheck () {
   assert(variantStatus(selectVariant(manifest, 'macos-arm64-mlx-translategemma-4b-q4'), os.tmpdir()).downloadable)
   assert(!runtimeStatus({ serverCommand: '__zadark_missing_runtime__' }).available)
   assert(resolveRuntimeCommand({ runtimeCandidates: [process.execPath] }) === process.execPath)
+  assert.throws(() => validateArchiveEntries(['../escape']), /Refusing unsafe runtime archive path/)
   assert(translationCacheKey({ id: 'v' }, { text: 'hello', target: 'vi', context: ['a'] }).includes('"context":["a"]'))
   assert(normalizeContext(Array.from({ length: 20 }, (_, i) => `msg ${i}`)).length === 10)
   assert(buildTranslationMessages({ text: 'hello', source: 'en', target: 'vi', context: ['previous'] })[0].content.includes('previous'))
@@ -984,5 +1028,6 @@ module.exports = {
   selectVariant,
   startRuntime,
   stopRuntime,
+  validateArchiveEntries,
   variantStatus
 }

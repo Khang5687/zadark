@@ -16,6 +16,8 @@
   }
 
   const localTranslateStoragePayload = () => {
+    if (!isLocalTranslate()) return {}
+
     const storagePath = getLocalTranslateStoragePath()
     return storagePath ? { storagePath } : {}
   }

@@ -48,6 +48,10 @@ On Apple Silicon, ZaDark uses an existing MLX runtime when available and
 otherwise installs the official llama.cpp Metal runtime. End users do not need
 Python, `uv`, or a separate server application.
 
+Windows x64 uses the official llama.cpp CPU runtime as the reliable baseline.
+GPU-specific Windows runtimes are not selected until launch fallback is
+implemented.
+
 Runtime binaries are separate from model files. ZaDark looks for runtimes in
 its writable data directory first, then falls back to commands already on PATH:
 

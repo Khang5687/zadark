@@ -314,6 +314,19 @@ describe('local translate backend', () => {
     }
   })
 
+  it('rejects model install when disk space is too low', async () => {
+    const variant = {
+      id: 'too-large-hf-snapshot',
+      runtime: 'mlx',
+      modelRef: 'test/model',
+      downloadKind: 'hf-snapshot',
+      revision: 'main',
+      estimatedBytes: Number.MAX_SAFE_INTEGER
+    }
+
+    await expect(backend.installVariant(variant, tempDir)).rejects.toThrow('Not enough disk space for model')
+  })
+
   it('reports install progress while a snapshot download is running', async () => {
     const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
     process.env.ZADARK_HF_ENDPOINT = hfBaseUrl

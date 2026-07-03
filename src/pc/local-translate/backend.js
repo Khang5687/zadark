@@ -509,6 +509,11 @@ async function installVariant (variant, storagePath) {
   const existing = installs.get(key)
   if (existing) return existing.promise
 
+  const disk = getDiskInfo(root, variant.estimatedBytes || 0)
+  if (disk.available && disk.fits === false) {
+    throw new Error('Not enough disk space for model')
+  }
+
   const progress = {
     running: true,
     downloadedBytes: 0,

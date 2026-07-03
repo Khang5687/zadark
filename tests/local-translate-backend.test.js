@@ -274,6 +274,16 @@ describe('local translate backend', () => {
     }
   })
 
+  it('does not start a runtime before the model is installed', async () => {
+    const result = await postJson(baseUrl, '/v1/local-translate/start', {
+      variantId: 'macos-arm64-mlx-translategemma-4b-q4',
+      storagePath: path.join(tempDir, 'missing-start-model')
+    })
+
+    expect(result.status).toBe(500)
+    expect(result.body.message).toBe('Model is not installed')
+  })
+
   it('downloads Hugging Face snapshot variants without external tools', async () => {
     const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
     process.env.ZADARK_HF_ENDPOINT = hfBaseUrl

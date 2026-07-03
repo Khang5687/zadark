@@ -675,6 +675,13 @@ function clearVariantTranslationCache (variantId) {
   }
 }
 
+function assertModelInstalled (variant, storagePath) {
+  const status = variantStatus(variant, storagePath)
+  if (!status.installed) {
+    throw new Error(status.installing ? 'Model is still downloading' : 'Model is not installed')
+  }
+}
+
 function postJson (url, body) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url)
@@ -754,10 +761,7 @@ async function translate (body) {
   }
 
   const root = storageRoot(body.storagePath)
-  const status = variantStatus(variant, root)
-  if (!status.installed) {
-    throw new Error(status.installing ? 'Model is still downloading' : 'Model is not installed')
-  }
+  assertModelInstalled(variant, root)
 
   const cached = getCachedTranslation(cacheKey)
   if (cached) return { ...cached, cached: true }
@@ -827,7 +831,10 @@ async function route (req, res) {
     if (req.method === 'POST' && url.pathname === '/v1/local-translate/start') {
       const body = await readJsonBody(req)
       const variant = selectVariant(manifest, body.variantId)
-      startRuntime(variant, body.storagePath)
+      const root = storageRoot(body.storagePath)
+      assertModelInstalled(variant, root)
+      startRuntime(variant, root)
+      scheduleIdleStop()
       return json(req, res, 200, { success: true, variant: variant.id })
     }
 

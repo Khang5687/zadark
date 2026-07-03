@@ -32,7 +32,7 @@
       "estimatedBytes": 2377945600,
       "serverCommand": "llama-server",
       "runtimeCandidates": ["{runtimeDir}/llama.cpp/bin/llama-server", "llama-server"],
-      "serverArgs": ["-m", "{modelPath}", "--port", "{port}", "-c", "2048"],
+      "serverArgs": ["-m", "{modelPath}", "--port", "{port}", "-c", "2048", "--jinja", "--chat-template-file", "{backendDir}/llama-chat-template.jinja"],
       "baseUrl": "http://127.0.0.1:{port}/v1"
     }
   ]

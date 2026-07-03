@@ -185,19 +185,40 @@ describe('local translate backend', () => {
     expect(disk.freeBytes).toBe(61440)
   })
 
-  it('caps context separately from TranslateGemma marker text', () => {
-    const messages = backend.buildTranslationMessages({
+  it('builds one bounded TranslateGemma request with conversation context', () => {
+    const request = backend.buildTranslationRequest({
+      runtime: 'llama.cpp',
+      model: 'translategemma'
+    }, {
       text: 'hello',
       source: 'en',
       target: 'vi',
       context: Array.from({ length: 20 }, (_, i) => `message ${i}`)
     })
 
-    expect(messages).toHaveLength(11)
-    expect(messages[0].content).not.toContain('message 0')
-    expect(messages[0].content).toContain('message 10')
-    expect(messages[9].content).toContain('message 19')
-    expect(messages[10].content).toBe('<<<source>>>en<<<target>>>vi<<<text>>>hello')
+    expect(request.messages).toEqual([{ role: 'user', content: 'hello' }])
+    expect(request.chat_template_kwargs).toEqual({
+      source_lang_code: 'en',
+      target_lang_code: 'vi',
+      context: Array.from({ length: 10 }, (_, i) => `message ${i + 10}`)
+    })
+  })
+
+  it('uses the MLX model marker format without unsupported request fields', () => {
+    const request = backend.buildTranslationRequest({
+      runtime: 'mlx',
+      model: 'translategemma'
+    }, {
+      text: 'hello',
+      target: 'vi',
+      context: ['previous']
+    })
+
+    expect(request.messages).toEqual([{
+      role: 'user',
+      content: '<<<source>>>auto<<<target>>>vi<<<text>>>hello'
+    }])
+    expect(request).not.toHaveProperty('chat_template_kwargs')
   })
 
   it('reports selected model, disk info, and storage path', async () => {

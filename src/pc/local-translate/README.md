@@ -41,6 +41,9 @@ It does not require `uv`, `huggingface-cli`, or Python tooling for the download.
 Production model URLs and Hugging Face revisions are pinned so upstream changes
 cannot silently replace an installed model.
 
+The llama.cpp variant uses `llama-chat-template.jinja` so `source: "auto"` and
+bounded conversation context work without changing the downloaded GGUF.
+
 Runtime binaries are separate from model files. ZaDark looks for runtimes in
 its writable data directory first, then falls back to commands already on PATH:
 

@@ -679,6 +679,7 @@ function replaceArgTokens (value, variant, storagePath) {
     .replace(/\{port\}/g, String(RUNTIME_PORT))
     .replace(/\{modelPath\}/g, modelPathFor(variant, storagePath))
     .replace(/\{modelRef\}/g, variant.modelRef || '')
+    .replace(/\{backendDir\}/g, __dirname)
 }
 
 function runtimeBaseUrl (variant, storagePath) {
@@ -767,20 +768,31 @@ function normalizeContext (context) {
   return normalized
 }
 
-function buildTranslationMessages (body) {
+function buildTranslationRequest (variant, body) {
   const source = body.source || 'auto'
   const target = body.target || 'vi'
   const context = normalizeContext(body.context)
-  return [
-    ...context.map((line) => ({
+  const isMlx = variant.runtime === 'mlx'
+  const content = isMlx
+    ? `<<<source>>>${source}<<<target>>>${target}<<<text>>>${body.text || ''}`
+    : body.text || ''
+  const request = {
+    model: variant.modelRef || variant.model,
+    messages: [{
       role: 'user',
-      content: `Previous chat context, do not translate this line: ${line}`
-    })),
-    {
-      role: 'user',
-      content: `<<<source>>>${source}<<<target>>>${target}<<<text>>>${body.text || ''}`
+      content
+    }],
+    temperature: 0,
+    max_tokens: 512
+  }
+  if (!isMlx) {
+    request.chat_template_kwargs = {
+      source_lang_code: source,
+      target_lang_code: target,
+      context
     }
-  ]
+  }
+  return request
 }
 
 function translationCacheKey (variant, body) {
@@ -912,12 +924,7 @@ async function translate (body) {
   startRuntime(variant, root)
 
   const upstream = process.env.ZADARK_LOCAL_TRANSLATE_UPSTREAM || runtimeBaseUrl(variant, root)
-  const runtimeResponse = await postJsonWithRetry(`${upstream}/chat/completions`, {
-    model: variant.modelRef || variant.model,
-    messages: buildTranslationMessages(body),
-    temperature: 0,
-    max_tokens: 512
-  })
+  const runtimeResponse = await postJsonWithRetry(`${upstream}/chat/completions`, buildTranslationRequest(variant, body))
 
   const translation = runtimeResponse &&
     runtimeResponse.choices &&
@@ -1008,7 +1015,9 @@ async function route (req, res) {
 
 function selfCheck () {
   const manifest = loadManifest()
-  assert(selectVariant(manifest, 'desktop-llamacpp-translategemma-4b-q4').id === 'desktop-llamacpp-translategemma-4b-q4')
+  const llamaVariant = selectVariant(manifest, 'desktop-llamacpp-translategemma-4b-q4')
+  assert(llamaVariant.id === 'desktop-llamacpp-translategemma-4b-q4')
+  assert(fs.existsSync(replaceArgTokens(llamaVariant.serverArgs[llamaVariant.serverArgs.length - 1], llamaVariant, os.tmpdir())))
   assert(variantStatus(selectVariant(manifest, 'macos-arm64-mlx-translategemma-4b-q4'), os.tmpdir()).downloadable)
   assert(variantStatus(selectVariant(manifest, 'desktop-llamacpp-translategemma-4b-q4'), os.tmpdir()).downloadable)
   assert(!runtimeStatus({ serverCommand: '__zadark_missing_runtime__' }).available)
@@ -1016,7 +1025,7 @@ function selfCheck () {
   assert.throws(() => validateArchiveEntries(['../escape']), /Refusing unsafe runtime archive path/)
   assert(translationCacheKey({ id: 'v' }, { text: 'hello', target: 'vi', context: ['a'] }).includes('"context":["a"]'))
   assert(normalizeContext(Array.from({ length: 20 }, (_, i) => `msg ${i}`)).length === 10)
-  assert(buildTranslationMessages({ text: 'hello', source: 'en', target: 'vi', context: ['previous'] })[0].content.includes('previous'))
+  assert(buildTranslationRequest({ runtime: 'llama.cpp', model: 'test' }, { text: 'hello', source: 'en', target: 'vi', context: ['previous'] }).chat_template_kwargs.context[0] === 'previous')
   assert(parseDfOutput('Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/disk 100 40 60 40% /tmp').freeBytes === 61440)
   assert(IDLE_TIMEOUT_MS >= 0)
   console.log('local-translate backend self-check passed')
@@ -1042,7 +1051,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  buildTranslationMessages,
+  buildTranslationRequest,
   detectHardware,
   getDiskInfo,
   installVariant,

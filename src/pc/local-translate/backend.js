@@ -39,7 +39,12 @@ function isAllowedOrigin (origin) {
 
   try {
     const parsed = new URL(origin)
-    return ['127.0.0.1', 'localhost', '::1'].includes(parsed.hostname)
+    const hostname = parsed.hostname
+    return ['127.0.0.1', 'localhost', '::1'].includes(hostname) ||
+      hostname === 'zalo.me' ||
+      hostname.endsWith('.zalo.me') ||
+      hostname === 'zaloapp.com' ||
+      hostname.endsWith('.zaloapp.com')
   } catch (error) {
     return false
   }

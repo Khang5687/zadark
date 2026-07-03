@@ -72,7 +72,7 @@
       const downloadBytes = selected.downloadEstimatedBytes || selected.estimatedBytes
       const runtimeCanInstall = selected.runtimeAvailable !== false || selected.runtimeDownloadable
       const canDownload = !isInstalling && runtimeCanInstall && selected.downloadable && disk.fits !== false
-      const installButtonText = isInstalling ? `Đang tải ${installProgress.percent || 0}%` : 'Tải model AI'
+      const installButtonText = isInstalling ? `Đang tải ${installProgress.percent || 0}%` : 'Đồng ý và tải'
 
       const $dialog = $(`
         <div class="zadark-local-translate-dialog">
@@ -83,6 +83,9 @@
             </div>
             <div class="zadark-local-translate-dialog__text">
               ZaDark cần tải khoảng <strong>${formatBytes(downloadBytes)}</strong> dữ liệu AI. Ổ đĩa này sẽ dùng thêm khoảng <strong>${modelPercent}%</strong> dung lượng.
+            </div>
+            <div class="zadark-local-translate-dialog__text">
+              Khi tải model, bạn đồng ý với <a href="https://ai.google.dev/gemma/terms" target="_blank" rel="noopener noreferrer">Điều khoản Gemma</a> và <a href="https://ai.google.dev/gemma/prohibited_use_policy" target="_blank" rel="noopener noreferrer">Chính sách sử dụng</a>.
             </div>
             <div class="zadark-local-translate-dialog__disk">
               <div class="zadark-local-translate-dialog__bar">
@@ -150,7 +153,7 @@
           finish(true)
         } catch (error) {
           if (pollTimer) clearInterval(pollTimer)
-          $button.prop('disabled', false).text('Tải model AI')
+          $button.prop('disabled', false).text('Đồng ý và tải')
           $dialog.find('[data-action="cancel"]').prop('disabled', false)
           $error.text(error.message)
         }

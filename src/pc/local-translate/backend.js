@@ -22,6 +22,7 @@ const IDLE_TIMEOUT_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_IDLE_MS || 15 
 const HF_DEFAULT_ENDPOINT = 'https://huggingface.co'
 const RUNTIME_DIR = process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_DIR || path.join(DATA_DIR, 'runtimes')
 const RUNTIME_STATUS_TTL_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_STATUS_TTL_MS || 30 * 1000)
+const GEMMA_NOTICE_PATH = path.join(__dirname, 'GEMMA_NOTICE.txt')
 
 const state = {
   child: null,
@@ -372,6 +373,17 @@ function snapshotInstalled (variant, storagePath) {
   return fs.readdirSync(modelDir).some((name) => name !== path.basename(markerPath))
 }
 
+function usesGemmaTerms (variant) {
+  return String(variant.model || '').toLowerCase().includes('gemma')
+}
+
+function copyGemmaNotice (variant, storagePath) {
+  if (!usesGemmaTerms(variant) || !fs.existsSync(GEMMA_NOTICE_PATH)) return
+  const targetDir = modelDirFor(variant, storagePath)
+  fs.mkdirSync(targetDir, { recursive: true })
+  fs.copyFileSync(GEMMA_NOTICE_PATH, path.join(targetDir, 'GEMMA_NOTICE.txt'))
+}
+
 function installKey (variant, storagePath) {
   return `${variant.id}:${storageRoot(storagePath)}`
 }
@@ -678,6 +690,9 @@ async function installVariant (variant, storagePath) {
   const promise = installRuntimeVariant(variant, updateProgress).then((runtimeResult) => {
     previousBytes = runtimeResult ? variant.runtimeEstimatedBytes || runtimeResult.bytes || previousBytes : 0
     return runInstallVariant(variant, root, updateProgress)
+  }).then((modelResult) => {
+    copyGemmaNotice(variant, root)
+    return modelResult
   }).finally(() => {
     installs.delete(key)
   })

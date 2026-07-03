@@ -161,6 +161,12 @@ describe('local translate backend', () => {
         return
       }
 
+      if (req.url === '/model/fake.gguf') {
+        res.writeHead(200)
+        res.end('tiny gguf')
+        return
+      }
+
       if (req.url === '/test/model/resolve/main/model.safetensors') {
         testModelDownloadCount += 1
         res.writeHead(200)
@@ -476,6 +482,7 @@ describe('local translate backend', () => {
       const variant = {
         id: 'test-hf-snapshot',
         runtime: 'mlx',
+        model: 'translategemma-4b-it',
         modelRef: 'test/model',
         downloadKind: 'hf-snapshot',
         revision: 'main'
@@ -489,6 +496,7 @@ describe('local translate backend', () => {
       expect(installed.files).toBe(2)
       expect(fs.readFileSync(path.join(installed.path, 'config.json'), 'utf8')).toBe('{"ok":true}')
       expect(fs.readFileSync(path.join(installed.path, 'model.safetensors'), 'utf8')).toBe('tiny model')
+      expect(fs.readFileSync(path.join(installed.path, 'GEMMA_NOTICE.txt'), 'utf8')).toContain('https://ai.google.dev/gemma/terms')
 
       const after = backend.variantStatus(variant, tempDir)
       expect(after.installed).toBe(true)
@@ -518,6 +526,22 @@ describe('local translate backend', () => {
         delete process.env.ZADARK_HF_ENDPOINT
       }
     }
+  })
+
+  it('copies the Gemma notice beside direct model downloads', async () => {
+    const variant = {
+      id: 'direct-gemma-model',
+      runtime: 'test',
+      model: 'translategemma-4b-it',
+      modelRef: 'fake.gguf',
+      modelUrl: `${hfBaseUrl}/model/fake.gguf`,
+      sha256: crypto.createHash('sha256').update('tiny gguf').digest('hex'),
+      estimatedBytes: Buffer.byteLength('tiny gguf')
+    }
+
+    const installed = await backend.installVariant(variant, tempDir)
+    expect(fs.readFileSync(installed.path, 'utf8')).toBe('tiny gguf')
+    expect(fs.readFileSync(path.join(path.dirname(installed.path), 'GEMMA_NOTICE.txt'), 'utf8')).toContain('https://ai.google.dev/gemma/terms')
   })
 
   it('downloads a declared runtime artifact before the model', async () => {

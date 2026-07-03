@@ -42,13 +42,13 @@
     return json
   }
 
-  const installLocalTranslateModel = async (variantId) => {
+  const installLocalTranslateModel = async (variantId, acceptedGemmaTerms = false) => {
     const res = await fetch(getTranslateApiURL() + '/local-translate/install', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ variantId, ...localTranslateStoragePayload() })
+      body: JSON.stringify({ variantId, acceptedGemmaTerms, ...localTranslateStoragePayload() })
     })
     const json = await res.json()
     if (!res.ok || !json.success) {
@@ -72,6 +72,7 @@
       const downloadBytes = selected.downloadEstimatedBytes || selected.estimatedBytes
       const runtimeCanInstall = selected.runtimeAvailable !== false || selected.runtimeDownloadable
       const canDownload = !isInstalling && runtimeCanInstall && selected.downloadable && disk.fits !== false
+      const requiresGemmaTerms = String(selected.model || '').toLowerCase().includes('gemma')
       const installButtonText = isInstalling ? `Đang tải ${installProgress.percent || 0}%` : 'Đồng ý và tải'
 
       const $dialog = $(`
@@ -79,14 +80,20 @@
           <div class="zadark-local-translate-dialog__box">
             <div class="zadark-local-translate-dialog__title">Dịch AI cục bộ</div>
             <div class="zadark-local-translate-dialog__text">
-              Dịch tin nhắn miễn phí và riêng tư. Model AI sẽ chạy trực tiếp trên máy tính của bạn.
+              Chức năng dịch này miễn phí và riêng tư vì model AI chạy trực tiếp trên máy tính của bạn.
             </div>
             <div class="zadark-local-translate-dialog__text">
               ZaDark cần tải khoảng <strong>${formatBytes(downloadBytes)}</strong> dữ liệu AI. Ổ đĩa này sẽ dùng thêm khoảng <strong>${modelPercent}%</strong> dung lượng.
             </div>
             <div class="zadark-local-translate-dialog__text">
-              Khi tải model, bạn đồng ý với <a href="https://ai.google.dev/gemma/terms" target="_blank" rel="noopener noreferrer">Điều khoản Gemma</a> và <a href="https://ai.google.dev/gemma/prohibited_use_policy" target="_blank" rel="noopener noreferrer">Chính sách sử dụng</a>.
+              Model dịch dùng Google TranslateGemma và có điều khoản sử dụng riêng.
             </div>
+            ${requiresGemmaTerms
+              ? `<label class="zadark-local-translate-dialog__terms">
+                  <input type="checkbox" class="zadark-local-translate-dialog__terms-input">
+                  <span>Tôi đã đọc và đồng ý với <a href="https://ai.google.dev/gemma/terms" target="_blank" rel="noopener noreferrer">Điều khoản sử dụng Gemma</a> và <a href="https://ai.google.dev/gemma/prohibited_use_policy" target="_blank" rel="noopener noreferrer">Chính sách sử dụng bị cấm</a>.</span>
+                </label>`
+              : ''}
             <div class="zadark-local-translate-dialog__disk">
               <div class="zadark-local-translate-dialog__bar">
                 <div class="zadark-local-translate-dialog__bar-used" style="width: ${usedPercent}%"></div>
@@ -100,7 +107,7 @@
             <div class="zadark-local-translate-dialog__error"></div>
             <div class="zadark-local-translate-dialog__actions">
               <button type="button" class="zadark-local-translate-dialog__button" data-action="cancel">Huỷ</button>
-              <button type="button" class="zadark-local-translate-dialog__button zadark-local-translate-dialog__button--primary" data-action="install" ${canDownload ? '' : 'disabled'}>${installButtonText}</button>
+              <button type="button" class="zadark-local-translate-dialog__button zadark-local-translate-dialog__button--primary" data-action="install" ${canDownload && !requiresGemmaTerms ? '' : 'disabled'}>${installButtonText}</button>
             </div>
           </div>
         </div>
@@ -133,6 +140,10 @@
       }
 
       const $error = $dialog.find('.zadark-local-translate-dialog__error')
+      const updateInstallButton = () => {
+        const accepted = !requiresGemmaTerms || $dialog.find('.zadark-local-translate-dialog__terms-input').prop('checked')
+        $dialog.find('[data-action="install"]').prop('disabled', !canDownload || !accepted)
+      }
       if (!selected.downloadable) {
         $error.text('Model AI chưa có gói tải thử nghiệm.')
       } else if (!runtimeCanInstall) {
@@ -142,14 +153,17 @@
       }
 
       $dialog.on('click', '[data-action="cancel"]', () => finish(false))
+      $dialog.on('change', '.zadark-local-translate-dialog__terms-input', updateInstallButton)
       $dialog.on('click', '[data-action="install"]', async function () {
         const $button = $(this)
+        const acceptedGemmaTerms = !requiresGemmaTerms || $dialog.find('.zadark-local-translate-dialog__terms-input').prop('checked')
+        if (!acceptedGemmaTerms) return
         $button.prop('disabled', true).text('Đang tải...')
         $dialog.find('[data-action="cancel"]').prop('disabled', true)
         $error.text('')
         pollInstallProgress($button)
         try {
-          await installLocalTranslateModel(selected.id)
+          await installLocalTranslateModel(selected.id, acceptedGemmaTerms)
           finish(true)
         } catch (error) {
           if (pollTimer) clearInterval(pollTimer)

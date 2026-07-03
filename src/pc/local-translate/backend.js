@@ -1014,6 +1014,9 @@ async function route (req, res) {
     if (req.method === 'POST' && url.pathname === '/v1/local-translate/install') {
       const body = await readJsonBody(req)
       const variant = selectVariant(manifest, body.variantId)
+      if (usesGemmaTerms(variant) && body.acceptedGemmaTerms !== true) {
+        return json(req, res, 400, { success: false, message: 'Gemma terms must be accepted before download' })
+      }
       const result = await installVariant(variant, body.storagePath)
       return json(req, res, 200, { success: true, variant: variant.id, ...result })
     }

@@ -42,8 +42,9 @@ Production model URLs and Hugging Face revisions are pinned so upstream changes
 cannot silently replace an installed model.
 
 TranslateGemma use is subject to the Gemma terms and prohibited-use policy.
-`GEMMA_NOTICE.txt` is packaged with the backend, and the setup action links to
-both documents before download.
+`GEMMA_NOTICE.txt` is packaged with the backend and copied beside downloaded
+Gemma models. The setup action links to both documents before download, and the
+install API requires `acceptedGemmaTerms: true` for Gemma variants.
 
 The llama.cpp variant uses `llama-chat-template.jinja` so `source: "auto"` and
 bounded conversation context work without changing the downloaded GGUF.

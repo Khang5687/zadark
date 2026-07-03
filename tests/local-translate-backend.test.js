@@ -473,6 +473,16 @@ describe('local translate backend', () => {
     expect(result.body.message).toBe('Model is not installed')
   })
 
+  it('requires Gemma terms acceptance before model install', async () => {
+    const result = await postJson(baseUrl, '/v1/local-translate/install', {
+      variantId: 'macos-arm64-mlx-translategemma-4b-q4',
+      storagePath: path.join(tempDir, 'missing-gemma-terms')
+    })
+
+    expect(result.status).toBe(400)
+    expect(result.body.message).toBe('Gemma terms must be accepted before download')
+  })
+
   it('downloads Hugging Face snapshot variants without external tools', async () => {
     const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
     process.env.ZADARK_HF_ENDPOINT = hfBaseUrl
@@ -754,6 +764,7 @@ describe('local translate backend', () => {
     try {
       const body = {
         variantId: 'macos-arm64-mlx-translategemma-4b-q4',
+        acceptedGemmaTerms: true,
         storagePath: path.join(tempDir, 'delete-during-install')
       }
 

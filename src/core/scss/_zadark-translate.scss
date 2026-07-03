@@ -115,6 +115,20 @@
     margin-top: 8px;
   }
 
+  .zadark-local-translate-dialog__terms {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+
+    color: var(--zadark-neutral-base);
+    font-size: 13px;
+  }
+
+  .zadark-local-translate-dialog__terms-input {
+    flex: 0 0 auto;
+    margin-top: 3px;
+  }
+
   .zadark-local-translate-dialog__disk {
     margin-top: 14px;
   }

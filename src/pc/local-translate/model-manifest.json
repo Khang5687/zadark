@@ -10,11 +10,12 @@
       "runtime": "mlx",
       "model": "translategemma-4b-it",
       "modelRef": "mlx-community/translategemma-4b-it-4bit_immersive-translate",
-      "modelUrl": "",
+      "downloadKind": "hf-snapshot",
+      "revision": "main",
       "sha256": "",
       "estimatedBytes": 2147483648,
       "serverCommand": "python3",
-      "serverArgs": ["-m", "mlx_lm.server", "--model", "{modelRef}", "--port", "{port}"],
+      "serverArgs": ["-m", "mlx_lm.server", "--model", "{modelPath}", "--port", "{port}"],
       "baseUrl": "http://127.0.0.1:{port}/v1"
     },
     {

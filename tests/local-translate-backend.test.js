@@ -1,4 +1,5 @@
 const fs = require('fs')
+const crypto = require('crypto')
 const http = require('http')
 const os = require('os')
 const path = require('path')
@@ -25,6 +26,8 @@ describe('local translate backend', () => {
   let server
   let baseUrl
   let tempDir
+  let hfServer
+  let hfBaseUrl
 
   beforeAll(async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zadark-local-translate-'))
@@ -32,10 +35,57 @@ describe('local translate backend', () => {
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
     const address = server.address()
     baseUrl = `http://127.0.0.1:${address.port}`
+
+    hfServer = http.createServer((req, res) => {
+      if (req.url.startsWith('/api/models/test/model/tree/main')) {
+        const model = 'tiny model'
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify([
+          {
+            type: 'file',
+            path: 'config.json',
+            size: Buffer.byteLength('{"ok":true}'),
+            lfs: { oid: crypto.createHash('sha256').update('{"ok":true}').digest('hex') }
+          },
+          {
+            type: 'file',
+            path: 'model.safetensors',
+            size: Buffer.byteLength(model),
+            lfs: { oid: crypto.createHash('sha256').update(model).digest('hex') }
+          }
+        ]))
+        return
+      }
+
+      if (req.url === '/test/model/resolve/main/config.json') {
+        res.writeHead(307, { Location: '/resolve-cache/config.json' })
+        res.end()
+        return
+      }
+
+      if (req.url === '/resolve-cache/config.json') {
+        res.writeHead(200)
+        res.end('{"ok":true}')
+        return
+      }
+
+      if (req.url === '/test/model/resolve/main/model.safetensors') {
+        res.writeHead(200)
+        res.end('tiny model')
+        return
+      }
+
+      res.writeHead(404)
+      res.end('not found')
+    })
+    await new Promise((resolve) => hfServer.listen(0, '127.0.0.1', resolve))
+    const hfAddress = hfServer.address()
+    hfBaseUrl = `http://127.0.0.1:${hfAddress.port}`
   })
 
   afterAll(async () => {
     await new Promise((resolve) => server.close(resolve))
+    await new Promise((resolve) => hfServer.close(resolve))
     fs.rmSync(tempDir, { recursive: true, force: true })
   })
 
@@ -66,5 +116,41 @@ describe('local translate backend', () => {
     expect(result.body.selected.storagePath).toBe(tempDir)
     expect(result.body.selected.disk).toHaveProperty('available')
     expect(result.body.selected.estimatedBytes).toBeGreaterThan(0)
+  })
+
+  it('downloads Hugging Face snapshot variants without external tools', async () => {
+    const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
+    process.env.ZADARK_HF_ENDPOINT = hfBaseUrl
+
+    try {
+      const variant = {
+        id: 'test-hf-snapshot',
+        runtime: 'mlx',
+        modelRef: 'test/model',
+        downloadKind: 'hf-snapshot',
+        revision: 'main'
+      }
+
+      const before = backend.variantStatus(variant, tempDir)
+      expect(before.downloadable).toBe(true)
+      expect(before.installed).toBe(false)
+
+      const installed = await backend.installVariant(variant, tempDir)
+      expect(installed.files).toBe(2)
+      expect(fs.readFileSync(path.join(installed.path, 'config.json'), 'utf8')).toBe('{"ok":true}')
+      expect(fs.readFileSync(path.join(installed.path, 'model.safetensors'), 'utf8')).toBe('tiny model')
+
+      const after = backend.variantStatus(variant, tempDir)
+      expect(after.installed).toBe(true)
+
+      const second = await backend.installVariant(variant, tempDir)
+      expect(second.alreadyInstalled).toBe(true)
+    } finally {
+      if (previousEndpoint) {
+        process.env.ZADARK_HF_ENDPOINT = previousEndpoint
+      } else {
+        delete process.env.ZADARK_HF_ENDPOINT
+      }
+    }
   })
 })

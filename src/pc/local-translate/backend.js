@@ -18,6 +18,7 @@ const MAX_CONTEXT_CHARS = 4000
 const MANIFEST_PATH = process.env.ZADARK_LOCAL_TRANSLATE_MANIFEST || path.join(__dirname, 'model-manifest.json')
 const DEFAULT_STORAGE_DIR = process.env.ZADARK_LOCAL_TRANSLATE_STORAGE_DIR || DATA_DIR
 const IDLE_TIMEOUT_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_IDLE_MS || 15 * 60 * 1000)
+const HF_DEFAULT_ENDPOINT = 'https://huggingface.co'
 
 const state = {
   child: null,
@@ -193,7 +194,12 @@ function modelDirFor (variant, storagePath) {
 }
 
 function modelPathFor (variant, storagePath) {
+  if (variant.downloadKind === 'hf-snapshot') return modelDirFor(variant, storagePath)
   return path.join(modelDirFor(variant, storagePath), path.basename(variant.modelRef || 'model.bin'))
+}
+
+function snapshotMarkerFor (variant, storagePath) {
+  return path.join(modelDirFor(variant, storagePath), '.snapshot-complete.json')
 }
 
 function directorySize (targetPath) {
@@ -211,6 +217,7 @@ function variantStatus (variant, storagePath) {
   const modelPath = modelPathFor(variant, root)
   const modelDir = modelDirFor(variant, root)
   const estimatedBytes = variant.estimatedBytes || 0
+  const isSnapshot = variant.downloadKind === 'hf-snapshot'
   return {
     id: variant.id,
     runtime: variant.runtime,
@@ -219,8 +226,8 @@ function variantStatus (variant, storagePath) {
     estimatedBytes,
     storagePath: root,
     modelPath,
-    installed: variant.modelUrl ? fs.existsSync(modelPath) : false,
-    downloadable: !!variant.modelUrl,
+    installed: isSnapshot ? fs.existsSync(snapshotMarkerFor(variant, root)) : !!variant.modelUrl && fs.existsSync(modelPath),
+    downloadable: isSnapshot || !!variant.modelUrl,
     disk: getDiskInfo(root, estimatedBytes),
     usedBytes: directorySize(modelDir),
     running: !!state.child,
@@ -228,6 +235,48 @@ function variantStatus (variant, storagePath) {
     lastUsedAt: state.lastUsedAt,
     lastError: state.lastError
   }
+}
+
+function hfEndpoint () {
+  return (process.env.ZADARK_HF_ENDPOINT || HF_DEFAULT_ENDPOINT).replace(/\/$/, '')
+}
+
+function encodePathSegments (value) {
+  return String(value).split('/').map(encodeURIComponent).join('/')
+}
+
+function hfApiTreeUrl (repo, revision) {
+  return `${hfEndpoint()}/api/models/${encodePathSegments(repo)}/tree/${encodeURIComponent(revision || 'main')}?recursive=1`
+}
+
+function hfResolveUrl (repo, revision, filePath) {
+  return `${hfEndpoint()}/${encodePathSegments(repo)}/resolve/${encodeURIComponent(revision || 'main')}/${encodePathSegments(filePath)}`
+}
+
+function getJson (url) {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith('https:') ? https : http
+    client.get(url, (response) => {
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        getJson(new URL(response.headers.location, url).toString()).then(resolve, reject)
+        return
+      }
+
+      let raw = ''
+      response.on('data', (chunk) => { raw += chunk })
+      response.on('end', () => {
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          reject(new Error(`Request failed with HTTP ${response.statusCode}`))
+          return
+        }
+        try {
+          resolve(JSON.parse(raw))
+        } catch (error) {
+          reject(new Error('Response was not valid JSON'))
+        }
+      })
+    }).on('error', reject)
+  })
 }
 
 function downloadFile (url, destPath, expectedSha256) {
@@ -242,7 +291,7 @@ function downloadFile (url, destPath, expectedSha256) {
       if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
         file.close()
         fs.rmSync(tmpPath, { force: true })
-        downloadFile(response.headers.location, destPath, expectedSha256).then(resolve, reject)
+        downloadFile(new URL(response.headers.location, url).toString(), destPath, expectedSha256).then(resolve, reject)
         return
       }
 
@@ -275,7 +324,51 @@ function downloadFile (url, destPath, expectedSha256) {
   })
 }
 
+async function downloadHuggingFaceSnapshot (variant, storagePath) {
+  const modelDir = modelDirFor(variant, storagePath)
+  const markerPath = snapshotMarkerFor(variant, storagePath)
+  if (fs.existsSync(markerPath)) return { path: modelDir, alreadyInstalled: true }
+
+  if (!variant.modelRef) throw new Error(`Variant ${variant.id} has no Hugging Face modelRef`)
+
+  const revision = variant.revision || 'main'
+  const files = await getJson(hfApiTreeUrl(variant.modelRef, revision))
+  if (!Array.isArray(files)) throw new Error('Hugging Face tree response was not a file list')
+
+  fs.mkdirSync(modelDir, { recursive: true })
+  let bytes = 0
+  for (const file of files) {
+    if (!file || file.type !== 'file' || !file.path) continue
+
+    const destPath = path.resolve(modelDir, file.path)
+    if (!destPath.startsWith(path.resolve(modelDir) + path.sep)) {
+      throw new Error(`Refusing unsafe model path: ${file.path}`)
+    }
+
+    await downloadFile(
+      hfResolveUrl(variant.modelRef, revision, file.path),
+      destPath,
+      file.lfs && file.lfs.oid
+    )
+    bytes += file.size || 0
+  }
+
+  fs.writeFileSync(markerPath, JSON.stringify({
+    modelRef: variant.modelRef,
+    revision,
+    files: files.length,
+    bytes,
+    installedAt: new Date().toISOString()
+  }, null, 2))
+
+  return { path: modelDir, files: files.length, bytes }
+}
+
 async function installVariant (variant, storagePath) {
+  if (variant.downloadKind === 'hf-snapshot') {
+    return downloadHuggingFaceSnapshot(variant, storagePath)
+  }
+
   if (!variant.modelUrl) {
     throw new Error(`Variant ${variant.id} has no modelUrl yet. Add an approved model artifact URL to the manifest.`)
   }
@@ -554,6 +647,7 @@ async function route (req, res) {
 function selfCheck () {
   const manifest = loadManifest()
   assert(selectVariant(manifest, 'desktop-llamacpp-translategemma-4b-q4').id === 'desktop-llamacpp-translategemma-4b-q4')
+  assert(variantStatus(selectVariant(manifest, 'macos-arm64-mlx-translategemma-4b-q4'), os.tmpdir()).downloadable)
   assert(normalizeContext(Array.from({ length: 20 }, (_, i) => `msg ${i}`)).length === 10)
   assert(buildTranslationMessages({ text: 'hello', source: 'en', target: 'vi', context: ['previous'] })[0].content.includes('previous'))
   assert(parseDfOutput('Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/disk 100 40 60 40% /tmp').freeBytes === 61440)
@@ -584,6 +678,7 @@ module.exports = {
   buildTranslationMessages,
   detectHardware,
   getDiskInfo,
+  installVariant,
   normalizeContext,
   parseDfOutput,
   route,

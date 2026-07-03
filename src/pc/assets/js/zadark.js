@@ -2110,10 +2110,16 @@
 
   let localTranslateStatusTimer = null
 
+  const stopLocalTranslateStatusPolling = () => {
+    if (!localTranslateStatusTimer) return
+    clearTimeout(localTranslateStatusTimer)
+    localTranslateStatusTimer = null
+  }
+
   const loadLocalTranslateStatus = async () => {
     const $status = $(localTranslateStatusElName)
     const $button = $(buttonDeleteLocalTranslateModelElName)
-    if (localTranslateStatusTimer) clearTimeout(localTranslateStatusTimer)
+    stopLocalTranslateStatusPolling()
 
     try {
       const status = await getLocalTranslateStatus()
@@ -2151,6 +2157,7 @@
 
   const handleLocalTranslateStoragePathChange = async function () {
     const storagePath = $(this).val().trim()
+    stopLocalTranslateStatusPolling()
     ZaDarkStorage.saveLocalTranslateStoragePath(storagePath)
     await loadLocalTranslateStatus()
   }
@@ -2210,6 +2217,7 @@
     } else {
       buttonEl.classList.remove('selected')
       popupEl.removeAttribute('data-visible')
+      stopLocalTranslateStatusPolling()
     }
   }
 
@@ -2301,7 +2309,7 @@
     $(inputLocalTranslateStoragePathElName).on('blur', handleLocalTranslateStoragePathChange)
     $(inputLocalTranslateStoragePathElName).on('keypress', function (event) {
       const isEnter = Number(event.keyCode ? event.keyCode : event.which) - 1 === 12
-      if (isEnter) handleLocalTranslateStoragePathChange.call(this)
+      if (isEnter) this.blur()
     })
 
     $(buttonDeleteLocalTranslateModelElName).on('click', handleDeleteLocalTranslateModel)

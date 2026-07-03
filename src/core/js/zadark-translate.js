@@ -14,6 +14,10 @@
     return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
   }
 
+  const normalizeTranslateText = (text) => String(text || '').replace(/(?:\r\n|\r|\n)/g, '<br>').trim()
+
+  const normalizeContextText = (text) => String(text || '').replace(/\s+/g, ' ').trim()
+
   const getLocalTranslateStatus = async () => {
     const res = await fetch(getTranslateApiURL() + '/local-translate/status')
     const json = await res.json()
@@ -125,7 +129,7 @@
     return showLocalTranslateSetup(status)
   }
 
-  const translate = async (text, target) => {
+  const translate = async (text, target, context = []) => {
     try {
       const isReady = await ensureLocalTranslateReady()
       if (!isReady) {
@@ -142,7 +146,8 @@
         },
         body: JSON.stringify({
           text,
-          target
+          target,
+          ...(isLocalTranslate() && context.length ? { context } : {})
         })
       })
       const json = await res.json()
@@ -160,6 +165,26 @@
     return regex.test(string)
   }
 
+  const collectLocalTranslateContext = ($anchor, currentText) => {
+    if (!isLocalTranslate()) return []
+
+    const $message = $anchor.closest('.card,.chatImageMessage,.chatImageMessage--audit')
+    if (!$message.length) return []
+
+    const context = []
+    const currentContextText = normalizeContextText(currentText)
+    $message.prevAll('.card,.chatImageMessage,.chatImageMessage--audit').each(function () {
+      if (context.length >= 10) return false
+
+      const text = normalizeContextText($(this).find('span-15').first().text())
+      if (!text || text === currentContextText || isValidURL(text)) return
+
+      context.push(text)
+    })
+
+    return context.reverse()
+  }
+
   /**
    *
    * @param {jQuery} $buttonWrapper Element will have "translation button" added.
@@ -173,7 +198,7 @@
       return
     }
 
-    const text = $text ? $text.text().replace(/(?:\r\n|\r|\n)/g, '<br>') : ''
+    const text = normalizeTranslateText($text ? $text.text() : '')
 
     // Skip if the text is empty
     if (!text) {
@@ -211,7 +236,7 @@
 
       $resultWrapper.append($nextTranslation)
 
-      translate(text, translateTarget).then((res) => {
+      translate(text, translateTarget, collectLocalTranslateContext($buttonWrapper, text)).then((res) => {
         if (!res.success) {
           $nextTranslation
             .addClass('zadark-translate-msg__content--error')

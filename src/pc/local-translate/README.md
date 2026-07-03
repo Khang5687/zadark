@@ -38,6 +38,8 @@ The manifest supports two download styles:
 
 The MLX TranslateGemma variant downloads its model snapshot directly with Node.
 It does not require `uv`, `huggingface-cli`, or Python tooling for the download.
+Production model URLs and Hugging Face revisions are pinned so upstream changes
+cannot silently replace an installed model.
 
 Runtime binaries are separate from model files. ZaDark looks for bundled
 runtimes first, then falls back to commands already on PATH:

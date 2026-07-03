@@ -109,7 +109,7 @@ describe('local translate backend', () => {
       }
 
       if (req.url.startsWith('/api/models/slow/model/tree/main') ||
-        req.url.startsWith('/api/models/mlx-community/translategemma-4b-it-4bit_immersive-translate/tree/main')) {
+        req.url.startsWith('/api/models/mlx-community/translategemma-4b-it-4bit_immersive-translate/tree/')) {
         const model = 'slow model'
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify([
@@ -155,7 +155,7 @@ describe('local translate backend', () => {
       }
 
       if (req.url === '/slow/model/resolve/main/model.safetensors' ||
-        req.url === '/mlx-community/translategemma-4b-it-4bit_immersive-translate/resolve/main/model.safetensors') {
+        req.url.startsWith('/mlx-community/translategemma-4b-it-4bit_immersive-translate/resolve/')) {
         res.writeHead(200)
         res.write('slow ')
         releaseSlowDownload = () => res.end('model')

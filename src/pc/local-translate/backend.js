@@ -1010,6 +1010,7 @@ function selfCheck () {
   const manifest = loadManifest()
   assert(selectVariant(manifest, 'desktop-llamacpp-translategemma-4b-q4').id === 'desktop-llamacpp-translategemma-4b-q4')
   assert(variantStatus(selectVariant(manifest, 'macos-arm64-mlx-translategemma-4b-q4'), os.tmpdir()).downloadable)
+  assert(variantStatus(selectVariant(manifest, 'desktop-llamacpp-translategemma-4b-q4'), os.tmpdir()).downloadable)
   assert(!runtimeStatus({ serverCommand: '__zadark_missing_runtime__' }).available)
   assert(resolveRuntimeCommand({ runtimeCandidates: [process.execPath] }) === process.execPath)
   assert.throws(() => validateArchiveEntries(['../escape']), /Refusing unsafe runtime archive path/)

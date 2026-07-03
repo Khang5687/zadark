@@ -79,4 +79,5 @@ avoid starting a broken translation flow.
 
 The heavy model runtime starts on demand and is stopped after the idle timeout
 (`ZADARK_LOCAL_TRANSLATE_IDLE_MS`, default 15 minutes). The backend itself is a
-thin in-app local API.
+thin in-app local API. Its model runtime uses a random private high port per app
+launch to reduce collisions with other local software.

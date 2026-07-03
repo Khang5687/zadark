@@ -10,7 +10,7 @@ const os = require('os')
 const path = require('path')
 
 const PORT = Number(process.env.ZADARK_LOCAL_TRANSLATE_PORT || 5555)
-const RUNTIME_PORT = Number(process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_PORT || 5556)
+const RUNTIME_PORT = Number(process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_PORT || crypto.randomInt(30000, 50000))
 const DATA_DIR = process.env.ZADARK_LOCAL_TRANSLATE_DIR || path.join(os.homedir(), '.zadark', 'local-translate')
 const MAX_BODY_BYTES = 1024 * 1024
 const MAX_CONTEXT_ITEMS = 10

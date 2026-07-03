@@ -199,7 +199,9 @@ describe('local translate backend', () => {
     expect(request.messages).toEqual([{ role: 'user', content: 'hello' }])
     expect(request.chat_template_kwargs).toEqual({
       source_lang_code: 'en',
+      source_language: 'English',
       target_lang_code: 'vi',
+      target_language: 'Vietnamese',
       context: Array.from({ length: 10 }, (_, i) => `message ${i + 10}`)
     })
   })
@@ -356,6 +358,30 @@ describe('local translate backend', () => {
       expect(backend.variantStatus(active, path.join(tempDir, 'other-model-root')).running).toBe(false)
     } finally {
       backend.stopRuntime()
+    }
+  })
+
+  it('retries while a model runtime reports that it is still loading', async () => {
+    let requests = 0
+    const loadingServer = http.createServer((req, res) => {
+      requests += 1
+      if (requests === 1) {
+        res.writeHead(503)
+        res.end('loading')
+        return
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end('{"ready":true}')
+    })
+    await new Promise((resolve) => loadingServer.listen(0, '127.0.0.1', resolve))
+
+    try {
+      const address = loadingServer.address()
+      const result = await backend.postJsonWithRetry(`http://127.0.0.1:${address.port}/ready`, {})
+      expect(result).toEqual({ ready: true })
+      expect(requests).toBe(2)
+    } finally {
+      await new Promise((resolve) => loadingServer.close(resolve))
     }
   })
 

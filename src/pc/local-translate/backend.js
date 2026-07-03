@@ -780,6 +780,15 @@ function normalizeContext (context) {
   return normalized
 }
 
+function languageName (code) {
+  if (!code || code === 'auto') return code || ''
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language' }).of(String(code).replace('_', '-')) || code
+  } catch (error) {
+    return code
+  }
+}
+
 function buildTranslationRequest (variant, body) {
   const source = body.source || 'auto'
   const target = body.target || 'vi'
@@ -800,7 +809,9 @@ function buildTranslationRequest (variant, body) {
   if (!isMlx) {
     request.chat_template_kwargs = {
       source_lang_code: source,
+      source_language: languageName(source),
       target_lang_code: target,
+      target_language: languageName(target),
       context
     }
   }
@@ -868,7 +879,9 @@ function postJson (url, body) {
       res.on('data', (chunk) => { raw += chunk })
       res.on('end', () => {
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          reject(new Error(`Runtime returned HTTP ${res.statusCode}`))
+          const error = new Error(`Runtime returned HTTP ${res.statusCode}`)
+          error.statusCode = res.statusCode
+          reject(error)
           return
         }
         try {
@@ -898,7 +911,7 @@ async function postJsonWithRetry (url, body) {
       return await postJson(url, body)
     } catch (error) {
       lastError = error
-      if (!['ECONNREFUSED', 'ECONNRESET'].includes(error.code)) break
+      if (!['ECONNREFUSED', 'ECONNRESET'].includes(error.code) && error.statusCode !== 503) break
       await sleep(1000)
     }
   }
@@ -1069,6 +1082,7 @@ module.exports = {
   installVariant,
   normalizeContext,
   parseDfOutput,
+  postJsonWithRetry,
   resolveRuntimeCommand,
   route,
   runtimeStatus,

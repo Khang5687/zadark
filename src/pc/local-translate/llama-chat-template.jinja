@@ -4,9 +4,9 @@ You are a professional translator.
 {% if source_lang_code == 'auto' %}
 Detect the source language.
 {% else %}
-The source language code is {{ source_lang_code }}.
+The source language is {{ source_language }} ({{ source_lang_code }}).
 {% endif %}
-The target language code is {{ target_lang_code }}.
+The target language is {{ target_language }} ({{ target_lang_code }}).
 {% if context %}
 Use the quoted conversation context only to resolve ambiguity. Do not translate or output it.
 <context>

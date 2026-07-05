@@ -162,23 +162,24 @@
     if (!messageEl) return []
 
     const convId = getCurrentConvId()
-    const currentContextText = normalizeContextText(currentText)
     const allItems = visibleMessageElements()
       .map((el) => ({ el, item: contextItemFromElement(el) }))
       .filter(({ item }) => item)
 
-    rememberContextItems(convId, allItems.map(({ item }) => item))
-
     const selectedIndex = allItems.findIndex(({ el }) => el === messageEl)
+    const selectedItem = selectedIndex >= 0 ? allItems[selectedIndex].item : contextItemFromElement(messageEl)
+    const selectedKey = selectedItem ? contextKey(selectedItem) : ''
     const visibleBefore = (selectedIndex >= 0 ? allItems.slice(0, selectedIndex) : allItems)
       .map(({ item }) => item)
-      .filter((item) => item.text !== currentContextText)
+      .filter((item) => contextKey(item) !== selectedKey)
       .slice(-CONTEXT_VISIBLE_LIMIT)
 
     const visibleKeys = new Set(visibleBefore.map(contextKey))
     const memoryBefore = (contextMemory.get(convId) || [])
-      .filter((item) => item.text !== currentContextText && !visibleKeys.has(contextKey(item)))
+      .filter((item) => contextKey(item) !== selectedKey && !visibleKeys.has(contextKey(item)))
       .slice(-CONTEXT_VISIBLE_LIMIT)
+
+    rememberContextItems(convId, allItems.map(({ item }) => item))
 
     return memoryBefore.concat(visibleBefore)
       .slice(-CONTEXT_VISIBLE_LIMIT)

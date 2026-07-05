@@ -71,6 +71,17 @@ describe('local translate context', () => {
     expect(context).toEqual([])
   })
 
+  it('keeps earlier same-text context from a different speaker', () => {
+    document.body.innerHTML = `
+      <div class="card incoming" data-sender-name="Alice"><span-15>Okay.</span-15></div>
+      <div class="card outgoing"><span-15>Okay.</span-15></div>
+    `
+
+    const context = window.ZaDarkTranslateContext.collectLocalTranslateContext(document.querySelectorAll('.card')[1], 'Okay.')
+
+    expect(context).toEqual(['[Alice] Okay.'])
+  })
+
   it('uses media placeholders when captions are unavailable', () => {
     const image = document.createElement('div')
     image.className = 'chatImageMessage incoming'

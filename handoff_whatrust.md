@@ -111,8 +111,18 @@ ZaDark uses a thin loopback HTTP API inside Electron:
 - `POST /v1/local-translate/stop`
 - `POST /v1/local-translate/delete-model`
 - `POST /v1/translate`
+- `POST /v1/translate/stream`
 
 The API is local-only and intended for the app renderer, not external clients.
+
+Streaming uses newline-delimited JSON over a streaming `fetch()` response.
+Events are `state`, `meta`, `delta`, `done`, or `error`. The final `done` event
+contains the complete translation so the UI can reconcile incremental output.
+Only completed results enter the existing memory cache. ZaDark serializes model
+generation, caps the queue at eight requests, propagates client cancellation to
+llama.cpp, and falls back to the non-streaming endpoint on older installations.
+WhatRust should use its existing native event/channel mechanism if that avoids
+an Electron-style loopback streaming endpoint.
 
 ### Runtime Lifecycle
 
@@ -485,7 +495,7 @@ Goal: release confidence.
 
 Recent checks that have passed during this work:
 
-- `npm test`: 49 tests passing.
+- `npm test`: 54 tests passing.
 - `node src/pc/local-translate/backend.js --self-check`: passing.
 - `standard` on touched JS files: passing.
 - `npm run build`: passing, with an existing Node `fs.Stats` deprecation warning.
@@ -507,6 +517,10 @@ Recent checks that have passed during this work:
 - Active model downloads are presented as a neutral pending state, with a thin
   progress bar on the main ZaDark sidebar button; they are not labeled as
   translation errors.
+- Real TranslateGemma streaming was verified on Apple Silicon: the backend
+  emitted startup metadata, incremental Vietnamese token deltas, and a complete
+  reconciled result. A repeated request returned the cached result without
+  regeneration.
 
 ## Known ZaDark Rough Edges
 

@@ -175,4 +175,19 @@ describe('local translate context', () => {
       message: 'Chưa tải'
     })
   })
+
+  it('parses fragmented and combined NDJSON stream events', () => {
+    const events = []
+    const parser = window.ZaDarkTranslateContext.createNdjsonParser((event) => events.push(event))
+
+    parser.write('{"type":"delta","text":"Xin')
+    parser.write(' chào"}\n{"type":"delta","text":" bạn"}\n{"type":"do')
+    parser.end('ne","translation":"Xin chào bạn"}\n')
+
+    expect(events).toEqual([
+      { type: 'delta', text: 'Xin chào' },
+      { type: 'delta', text: ' bạn' },
+      { type: 'done', translation: 'Xin chào bạn' }
+    ])
+  })
 })

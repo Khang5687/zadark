@@ -62,6 +62,27 @@
       color: var(--text-errors) !important;
     }
 
+    &--interrupted {
+      border-color: var(--border-warning) !important;
+    }
+
+    &__stream {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    &__retry {
+      margin-top: 8px;
+      padding: 4px 8px;
+
+      border: 1px solid var(--zadark-border-base);
+      border-radius: 4px;
+
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+    }
+
     .zadark-icon {
       position: relative;
       top: 2px;

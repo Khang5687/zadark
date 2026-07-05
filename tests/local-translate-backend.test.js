@@ -1,6 +1,7 @@
 const fs = require('fs')
 const childProcess = require('child_process')
 const crypto = require('crypto')
+const { EventEmitter } = require('events')
 const http = require('http')
 const os = require('os')
 const path = require('path')
@@ -41,6 +42,34 @@ function postJson (baseUrl, pathname, body) {
       res.on('end', () => {
         try {
           resolve({ status: res.statusCode, body: JSON.parse(raw) })
+        } catch (error) {
+          reject(error)
+        }
+      })
+    })
+    req.on('error', reject)
+    req.write(data)
+    req.end()
+  })
+}
+
+function postNdjson (baseUrl, pathname, body) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body)
+    const req = http.request(baseUrl + pathname, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      }
+    }, (res) => {
+      let raw = ''
+      res.setEncoding('utf8')
+      res.on('data', (chunk) => { raw += chunk })
+      res.on('end', () => {
+        try {
+          const events = raw.trim().split(/\r?\n/).filter(Boolean).map(JSON.parse)
+          resolve({ status: res.statusCode, headers: res.headers, events })
         } catch (error) {
           reject(error)
         }
@@ -241,6 +270,21 @@ describe('local translate backend', () => {
     expect(request).not.toHaveProperty('chat_template_kwargs')
   })
 
+  it('parses UTF-8 SSE data split at arbitrary byte boundaries', () => {
+    const events = []
+    const parser = backend.createSseParser((data) => events.push(data))
+    const bytes = Buffer.from('data: {"text":"Tiếng Việt"}\n\ndata: first\ndata: second\n\ndata: [DONE]\n\n')
+
+    for (const byte of bytes) parser.write(Buffer.from([byte]))
+    parser.end()
+
+    expect(events).toEqual([
+      '{"text":"Tiếng Việt"}',
+      'first\nsecond',
+      '[DONE]'
+    ])
+  })
+
   it('reports selected model, disk info, and storage path', async () => {
     const result = await requestJson(baseUrl, `/v1/local-translate/status?storagePath=${encodeURIComponent(tempDir)}`)
 
@@ -403,6 +447,56 @@ describe('local translate backend', () => {
     }
   })
 
+  it('streams fragmented UTF-8 deltas from an OpenAI-compatible runtime', async () => {
+    const runtimeServer = http.createServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      const bytes = Buffer.from('data: {"choices":[{"delta":{"content":"Xin chào"}}]}\n\ndata: {"choices":[{"delta":{"content":" bạn"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n')
+      for (let i = 0; i < bytes.length; i += 3) res.write(bytes.subarray(i, i + 3))
+      res.end()
+    })
+    await new Promise((resolve) => runtimeServer.listen(0, '127.0.0.1', resolve))
+
+    try {
+      const address = runtimeServer.address()
+      const token = { cancelled: false, request: null, downstream: new EventEmitter() }
+      let translation = ''
+      await backend.streamRuntimeWithRetry(
+        `http://127.0.0.1:${address.port}/chat/completions`,
+        { messages: [] },
+        token,
+        (delta) => {
+          translation += delta
+          return true
+        }
+      )
+
+      expect(translation).toBe('Xin chào bạn')
+    } finally {
+      await new Promise((resolve) => runtimeServer.close(resolve))
+    }
+  })
+
+  it('rejects malformed runtime stream events', async () => {
+    const runtimeServer = http.createServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      res.end('data: not-json\n\n')
+    })
+    await new Promise((resolve) => runtimeServer.listen(0, '127.0.0.1', resolve))
+
+    try {
+      const address = runtimeServer.address()
+      const token = { cancelled: false, request: null, downstream: new EventEmitter() }
+      await expect(backend.streamRuntimeWithRetry(
+        `http://127.0.0.1:${address.port}/chat/completions`,
+        { messages: [] },
+        token,
+        () => true
+      )).rejects.toThrow('Runtime returned invalid stream data')
+    } finally {
+      await new Promise((resolve) => runtimeServer.close(resolve))
+    }
+  })
+
   it('caches repeated local translation responses by text, target, and context', async () => {
     const previousMock = process.env.ZADARK_LOCAL_TRANSLATE_MOCK
     process.env.ZADARK_LOCAL_TRANSLATE_MOCK = '1'
@@ -438,6 +532,38 @@ describe('local translate backend', () => {
     }
   })
 
+  it('streams local translation events and reuses only the completed result', async () => {
+    const previousMock = process.env.ZADARK_LOCAL_TRANSLATE_MOCK
+    process.env.ZADARK_LOCAL_TRANSLATE_MOCK = '1'
+
+    try {
+      const body = {
+        variantId: 'desktop-llamacpp-translategemma-4b-q4',
+        text: 'stream me',
+        source: 'en',
+        target: 'vi',
+        context: ['speaker context']
+      }
+      const first = await postNdjson(baseUrl, '/v1/translate/stream', body)
+      const second = await postNdjson(baseUrl, '/v1/translate/stream', body)
+
+      expect(first.status).toBe(200)
+      expect(first.headers['content-type']).toContain('application/x-ndjson')
+      expect(first.events.map((event) => event.type)).toEqual(['meta', 'delta', 'done'])
+      expect(first.events[1].text).toBe('[vi] stream me')
+      expect(first.events[2].translation).toBe('[vi] stream me')
+      expect(second.events.map((event) => event.type)).toEqual(['meta', 'done'])
+      expect(second.events[0].cached).toBe(true)
+      expect(second.events[1].cached).toBe(true)
+    } finally {
+      if (previousMock) {
+        process.env.ZADARK_LOCAL_TRANSLATE_MOCK = previousMock
+      } else {
+        delete process.env.ZADARK_LOCAL_TRANSLATE_MOCK
+      }
+    }
+  })
+
   it('rejects real translation when the selected model is not installed', async () => {
     const previousMock = process.env.ZADARK_LOCAL_TRANSLATE_MOCK
     const body = {
@@ -453,9 +579,12 @@ describe('local translate backend', () => {
 
       delete process.env.ZADARK_LOCAL_TRANSLATE_MOCK
       const result = await postJson(baseUrl, '/v1/translate', body)
+      const streamResult = await postJson(baseUrl, '/v1/translate/stream', body)
 
       expect(result.status).toBe(500)
       expect(result.body.message).toBe('Model is not installed')
+      expect(streamResult.status).toBe(500)
+      expect(streamResult.body.message).toBe('Model is not installed')
     } finally {
       if (previousMock) {
         process.env.ZADARK_LOCAL_TRANSLATE_MOCK = previousMock

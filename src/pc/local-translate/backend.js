@@ -8,6 +8,7 @@ const http = require('http')
 const https = require('https')
 const os = require('os')
 const path = require('path')
+const { StringDecoder } = require('string_decoder')
 
 const PORT = Number(process.env.ZADARK_LOCAL_TRANSLATE_PORT || 5555)
 const RUNTIME_PORT = Number(process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_PORT || crypto.randomInt(30000, 50000))
@@ -16,6 +17,7 @@ const MAX_BODY_BYTES = 1024 * 1024
 const MAX_CONTEXT_ITEMS = 10
 const MAX_CONTEXT_CHARS = 4000
 const TRANSLATION_CACHE_LIMIT = 100
+const STREAM_QUEUE_LIMIT = 8
 const MANIFEST_PATH = process.env.ZADARK_LOCAL_TRANSLATE_MANIFEST || path.join(__dirname, 'model-manifest.json')
 const DEFAULT_STORAGE_DIR = process.env.ZADARK_LOCAL_TRANSLATE_STORAGE_DIR || DATA_DIR
 const IDLE_TIMEOUT_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_IDLE_MS || 15 * 60 * 1000)
@@ -35,6 +37,8 @@ const state = {
 const installs = new Map()
 const translationCache = new Map()
 const runtimeStatusCache = new Map()
+let streamQueue = Promise.resolve()
+let streamQueueDepth = 0
 
 function isAllowedOrigin (origin) {
   if (!origin || origin === 'null' || origin.startsWith('file://')) return true
@@ -714,8 +718,8 @@ function runtimeBaseUrl (variant, storagePath) {
 }
 
 function startRuntime (variant, storagePath) {
-  if (state.child) return
   clearIdleTimer()
+  if (state.child) return
 
   const runtime = runtimeStatus(variant)
   if (!runtime.available) throw new Error(runtime.message)
@@ -915,6 +919,270 @@ function postJson (url, body) {
   })
 }
 
+function createSseParser (onData) {
+  const decoder = new StringDecoder('utf8')
+  let buffer = ''
+  let dataLines = []
+
+  const dispatch = () => {
+    if (!dataLines.length) return
+    const data = dataLines.join('\n')
+    dataLines = []
+    onData(data)
+  }
+
+  const line = (value) => {
+    const next = value.endsWith('\r') ? value.slice(0, -1) : value
+    if (!next) return dispatch()
+    if (next.startsWith(':')) return
+    if (next === 'data') return dataLines.push('')
+    if (next.startsWith('data:')) dataLines.push(next.slice(5).replace(/^ /, ''))
+  }
+
+  const write = (chunk) => {
+    buffer += decoder.write(chunk)
+    const lines = buffer.split('\n')
+    buffer = lines.pop()
+    lines.forEach(line)
+  }
+
+  const end = () => {
+    buffer += decoder.end()
+    if (buffer) line(buffer)
+    dispatch()
+  }
+
+  return { write, end }
+}
+
+function streamRuntimeOnce (url, body, token, onDelta) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url)
+    const data = JSON.stringify({ ...body, stream: true })
+    const client = parsed.protocol === 'https:' ? https : http
+    let settled = false
+    let completed = false
+
+    const finish = (error) => {
+      if (settled) return
+      settled = true
+      token.request = null
+      if (error) reject(error)
+      else resolve()
+    }
+
+    const request = client.request({
+      method: 'POST',
+      hostname: parsed.hostname,
+      port: parsed.port,
+      path: parsed.pathname + parsed.search,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      }
+    }, (res) => {
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        res.resume()
+        const error = new Error(`Runtime returned HTTP ${res.statusCode}`)
+        error.statusCode = res.statusCode
+        return finish(error)
+      }
+
+      const parser = createSseParser((raw) => {
+        if (raw === '[DONE]') {
+          completed = true
+          return
+        }
+
+        let event
+        try {
+          event = JSON.parse(raw)
+        } catch (error) {
+          res.destroy()
+          return finish(new Error('Runtime returned invalid stream data'))
+        }
+
+        if (event.error) {
+          res.destroy()
+          return finish(new Error(event.error.message || event.error || 'Runtime stream failed'))
+        }
+
+        const choice = event.choices && event.choices[0]
+        const delta = choice && choice.delta && choice.delta.content
+        if (typeof delta === 'string' && delta) {
+          let writable
+          try {
+            writable = onDelta(delta)
+          } catch (error) {
+            res.destroy()
+            return finish(error)
+          }
+          if (writable === false) {
+            res.pause()
+            token.downstream.once('drain', () => res.resume())
+          }
+        }
+        if (choice && choice.finish_reason) completed = true
+      })
+
+      res.on('data', (chunk) => {
+        if (token.cancelled) return res.destroy()
+        parser.write(chunk)
+      })
+      res.on('end', () => {
+        parser.end()
+        if (token.cancelled) return finish(new Error('Translation cancelled'))
+        if (!completed) return finish(new Error('Runtime stream ended unexpectedly'))
+        finish()
+      })
+      res.on('error', finish)
+    })
+
+    token.request = request
+    request.on('error', finish)
+    request.setTimeout(60000, () => request.destroy(new Error('Runtime stream timed out')))
+    request.write(data)
+    request.end()
+  })
+}
+
+async function streamRuntimeWithRetry (url, body, token, onDelta) {
+  let lastError
+  for (let i = 0; i < 30 && !token.cancelled; i++) {
+    try {
+      return await streamRuntimeOnce(url, body, token, onDelta)
+    } catch (error) {
+      lastError = error
+      if (!['ECONNREFUSED', 'ECONNRESET'].includes(error.code) && error.statusCode !== 503) break
+      await sleep(1000)
+    }
+  }
+  throw lastError || new Error('Translation cancelled')
+}
+
+function enqueueStream (task) {
+  // ponytail: one active generation protects low-end machines; profile before adding parallel slots.
+  const previous = streamQueue
+  let release
+  streamQueue = new Promise((resolve) => { release = resolve })
+  streamQueueDepth += 1
+
+  return previous
+    .then(task)
+    .finally(() => {
+      streamQueueDepth -= 1
+      release()
+    })
+}
+
+function streamHeaders (req) {
+  return {
+    ...corsHeaders(req),
+    'Content-Type': 'application/x-ndjson; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff'
+  }
+}
+
+function writeStreamEvent (res, event) {
+  if (res.destroyed || res.writableEnded) return false
+  return res.write(JSON.stringify(event) + '\n')
+}
+
+async function streamTranslate (req, res, body) {
+  if (!body.text) throw new Error('Missing text')
+  if (!body.target) throw new Error('Missing target')
+
+  const manifest = loadManifest()
+  const variant = state.variant || selectVariant(manifest, body.variantId)
+  const cacheKey = translationCacheKey(variant, body)
+  const cached = getCachedTranslation(cacheKey)
+  const isMock = process.env.ZADARK_LOCAL_TRANSLATE_MOCK === '1'
+  const root = storageRoot(body.storagePath)
+
+  if (!isMock) {
+    assertModelInstalled(variant, root)
+    if (!cached) {
+      const runtime = runtimeStatus(variant)
+      if (!state.child && !runtime.available) throw new Error(runtime.message)
+      if (streamQueueDepth >= STREAM_QUEUE_LIMIT) {
+        const error = new Error('Too many translation requests')
+        error.statusCode = 429
+        throw error
+      }
+    }
+  }
+
+  res.writeHead(200, streamHeaders(req))
+
+  if (cached) {
+    writeStreamEvent(res, { type: 'meta', languageName: cached.languageName, model: cached.model, cached: true })
+    writeStreamEvent(res, { type: 'done', ...cached, cached: true })
+    return res.end()
+  }
+
+  if (isMock) {
+    const translation = `[${body.target}] ${body.text}`
+    const result = { success: true, languageName: body.source || 'Auto', translation, model: 'mock' }
+    writeStreamEvent(res, { type: 'meta', languageName: result.languageName, model: result.model, cached: false })
+    writeStreamEvent(res, { type: 'delta', text: translation })
+    setCachedTranslation(cacheKey, result)
+    writeStreamEvent(res, { type: 'done', ...result })
+    return res.end()
+  }
+
+  const token = { cancelled: res.destroyed, request: null, downstream: res }
+  res.on('close', () => {
+    if (res.writableEnded) return
+    token.cancelled = true
+    if (token.request) token.request.destroy(new Error('Translation cancelled'))
+  })
+
+  const queued = streamQueueDepth > 0
+  if (queued) writeStreamEvent(res, { type: 'state', state: 'queued' })
+
+  await enqueueStream(async () => {
+    if (token.cancelled) return
+
+    let translation = ''
+    try {
+      writeStreamEvent(res, { type: 'state', state: 'starting' })
+      startRuntime(variant, root)
+      const upstream = process.env.ZADARK_LOCAL_TRANSLATE_UPSTREAM || runtimeBaseUrl(variant, root)
+      writeStreamEvent(res, { type: 'meta', languageName: body.source || 'Auto', model: variant.id, cached: false })
+
+      await streamRuntimeWithRetry(
+        `${upstream}/chat/completions`,
+        buildTranslationRequest(variant, body),
+        token,
+        (delta) => {
+          translation += delta
+          if (translation.length > 16000) throw new Error('Translation output is too large')
+          return writeStreamEvent(res, { type: 'delta', text: delta })
+        }
+      )
+
+      if (token.cancelled) return
+      translation = translation.trim()
+      if (!translation) throw new Error('Runtime response did not include translated text')
+
+      const result = {
+        success: true,
+        languageName: body.source || 'Auto',
+        translation,
+        model: variant.id
+      }
+      setCachedTranslation(cacheKey, result)
+      writeStreamEvent(res, { type: 'done', ...result })
+    } catch (error) {
+      if (!token.cancelled) writeStreamEvent(res, { type: 'error', message: error.message, retryable: true, partial: translation })
+    } finally {
+      if (state.child) scheduleIdleStop()
+      if (!res.writableEnded) res.end()
+    }
+  })
+}
+
 function sleep (ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -1050,9 +1318,14 @@ async function route (req, res) {
       return json(req, res, 200, await translate(body))
     }
 
+    if (req.method === 'POST' && url.pathname === '/v1/translate/stream') {
+      const body = await readJsonBody(req)
+      return await streamTranslate(req, res, body)
+    }
+
     return json(req, res, 404, { success: false, message: 'Not found' })
   } catch (error) {
-    return json(req, res, 500, { success: false, message: error.message })
+    return json(req, res, error.statusCode || 500, { success: false, message: error.message })
   }
 }
 
@@ -1108,6 +1381,8 @@ module.exports = {
   normalizeContext,
   parseDfOutput,
   postJsonWithRetry,
+  createSseParser,
+  streamRuntimeWithRetry,
   resolveRuntimeCommand,
   route,
   runtimeStatus,

@@ -35,7 +35,7 @@
     message
   })
 
-  const normalizeTranslateText = (text) => String(text || '').replace(/(?:\r\n|\r|\n)/g, '<br>').trim()
+  const normalizeTranslateText = (text) => String(text || '').replace(/\r\n?/g, '\n').trim()
 
   const normalizeContextText = (text) => String(text || '').replace(/\s+/g, ' ').trim()
 
@@ -45,6 +45,7 @@
   const CONTEXT_MEMORY_CHAT_LIMIT = 100
   const CONTEXT_MEMORY_CHAR_LIMIT = 8000
   const contextMemory = new Map()
+  const activeTranslations = new Map()
 
   const getCurrentConvId = () => {
     return document.body.getAttribute('data-current-conv-id') || 'unknown'
@@ -408,6 +409,95 @@
     return showLocalTranslateSetup(status)
   }
 
+  const createNdjsonParser = (onEvent) => {
+    let buffer = ''
+
+    const parseLine = (line) => {
+      const trimmed = line.trim()
+      if (trimmed) onEvent(JSON.parse(trimmed))
+    }
+
+    return {
+      write: (text) => {
+        buffer += text
+        const lines = buffer.split('\n')
+        buffer = lines.pop()
+        lines.forEach(parseLine)
+      },
+      end: (text = '') => {
+        buffer += text
+        if (buffer) parseLine(buffer)
+        buffer = ''
+      }
+    }
+  }
+
+  const readNdjsonEvents = async (response, onEvent) => {
+    const reader = response.body.getReader()
+    const decoder = new window.TextDecoder()
+    const parser = createNdjsonParser(onEvent)
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        parser.write(decoder.decode(value, { stream: true }))
+      }
+      parser.end(decoder.decode())
+    } catch (error) {
+      await reader.cancel().catch(() => {})
+      throw error
+    } finally {
+      reader.releaseLock()
+    }
+  }
+
+  const streamLocalTranslate = async (text, target, context, signal, onEvent) => {
+    const readiness = await ensureLocalTranslateReady()
+    if (readiness !== true) return localTranslateNotReadyResult(readiness, localTranslateNotReadyMessage)
+
+    const response = await fetch(getTranslateApiURL() + '/translate/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      signal,
+      body: JSON.stringify({
+        text,
+        target,
+        ...localTranslateStoragePayload(),
+        ...(context.length ? { context } : {})
+      })
+    })
+
+    if (response.status === 404 || !response.body || typeof response.body.getReader !== 'function') {
+      if (response.body && typeof response.body.cancel === 'function') await response.body.cancel()
+      return null
+    }
+    if (!response.ok) {
+      let message = 'Không thể bắt đầu dịch'
+      try {
+        const error = await response.json()
+        message = error.message || message
+      } catch (error) {}
+      throw new Error(message)
+    }
+
+    let result = null
+    await readNdjsonEvents(response, (event) => {
+      if (event.type === 'error') {
+        const error = new Error(event.message || 'Luồng dịch bị gián đoạn')
+        error.partial = event.partial || ''
+        throw error
+      }
+      if (event.type === 'done') result = event
+      onEvent(event)
+    })
+
+    if (!result) throw new Error('Luồng dịch kết thúc không đầy đủ')
+    return result
+  }
+
   const translate = async (text, target, context = []) => {
     try {
       const readiness = await ensureLocalTranslateReady()
@@ -476,49 +566,110 @@
       e.stopPropagation()
 
       const $prevTranslation = $resultWrapper.find('.zadark-translate-msg__content')
+      const buttonEl = $button[0]
 
       if ($prevTranslation.length) {
+        const previousController = activeTranslations.get(buttonEl)
+        if (previousController) previousController.abort()
+        activeTranslations.delete(buttonEl)
         $prevTranslation.remove()
         return
       }
 
       const $nextTranslation = $('<div>')
         .addClass('zadark-translate-msg__content')
-        .html(`
-            <div class="zadark-translate-msg__content__title">
-              <i class="zadark-icon zadark-icon--translate"></i>
-              Đang dịch ...
-            </div>
-          `)
+      const $title = $('<div>').addClass('zadark-translate-msg__content__title').attr('aria-live', 'polite')
+      const $titleText = $('<span>').text('Đang dịch...')
+      const $output = $('<div>').addClass('zadark-translate-msg__content__stream').attr('dir', 'auto')
+      $title.append($('<i>').addClass('zadark-icon zadark-icon--translate'), $titleText)
+      $nextTranslation.append($title, $output)
 
       $resultWrapper.append($nextTranslation)
 
-      translate(text, translateTarget, collectLocalTranslateContext($buttonWrapper[0], text)).then((res) => {
-        if (!res.success) {
-          if (res.pending) {
-            $nextTranslation.html(`
-              <div class="zadark-translate-msg__content__title">
-                <i class="zadark-icon zadark-icon--translate"></i>
-                ${res.message}
-              </div>
-            `)
-            return
-          }
+      const supportsStreaming = isLocalTranslate() && window.AbortController && window.TextDecoder
+      const controller = supportsStreaming
+        ? new window.AbortController()
+        : { abort: () => {}, signal: undefined }
+      activeTranslations.set(buttonEl, controller)
+      let buffered = ''
+      let rendered = ''
+      let framePending = false
 
-          $nextTranslation
-            .addClass('zadark-translate-msg__content--error')
-            .html('Lỗi: ' + res.message)
-          return
+      const isCurrent = () => activeTranslations.get(buttonEl) === controller && $nextTranslation[0].isConnected
+      const setTitle = (value) => {
+        if (isCurrent()) $titleText.text(value)
+      }
+      const flush = () => {
+        framePending = false
+        if (!isCurrent()) return controller.abort()
+        if (!buffered) return
+        rendered += buffered
+        buffered = ''
+        $output.text(rendered)
+      }
+      const flushSoon = () => {
+        if (framePending) return
+        framePending = true
+        requestAnimationFrame(flush)
+      }
+      const retry = () => {
+        const $retry = $('<button>')
+          .addClass('zadark-translate-msg__retry')
+          .attr('type', 'button')
+          .text('Thử lại')
+        $retry.on('click', (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          $nextTranslation.remove()
+          $button.trigger('click')
+        })
+        $nextTranslation.append($retry)
+      }
+      const showFailure = (error) => {
+        flush()
+        const partial = error.partial || rendered
+        $nextTranslation.addClass(partial ? 'zadark-translate-msg__content--interrupted' : 'zadark-translate-msg__content--error')
+        setTitle(partial ? 'Bản dịch bị gián đoạn' : `Lỗi: ${error.message}`)
+        if (partial) $output.text(partial)
+        retry()
+      }
+
+      ;(async () => {
+        const context = collectLocalTranslateContext($buttonWrapper[0], text)
+        let result
+
+        if (supportsStreaming) {
+          result = await streamLocalTranslate(text, translateTarget, context, controller.signal, (event) => {
+            if (event.type === 'state' && event.state === 'queued') setTitle('Đang chờ dịch...')
+            if (event.type === 'state' && event.state === 'starting') setTitle('Đang khởi động model...')
+            if (event.type === 'delta') {
+              setTitle('Đang dịch...')
+              buffered += event.text || ''
+              flushSoon()
+            }
+          })
+          if (result === null) result = await translate(text, translateTarget, context)
+        } else {
+          result = await translate(text, translateTarget, context)
         }
 
-        $nextTranslation
-          .html(`
-              <div class="zadark-translate-msg__content__title">
-                <i class="zadark-icon zadark-icon--translate"></i>
-                ${res.languageName}
-              </div>
-              <div>${res.translation}</div>
-            `)
+        if (!isCurrent()) return
+        flush()
+        if (!result.success) {
+          if (result.pending) {
+            setTitle(result.message)
+            return
+          }
+          throw new Error(result.message)
+        }
+
+        $nextTranslation.removeClass('zadark-translate-msg__content--error zadark-translate-msg__content--interrupted')
+        setTitle(result.languageName || 'Bản dịch')
+        $output.text(result.translation).attr('aria-label', 'Bản dịch hoàn tất')
+      })().catch((error) => {
+        if (error.name !== 'AbortError' && isCurrent()) showFailure(error)
+      }).finally(() => {
+        if (activeTranslations.get(buttonEl) === controller) activeTranslations.delete(buttonEl)
       })
     })
 
@@ -563,10 +714,16 @@
     collectLocalTranslateContext,
     contextItemFromElement,
     formatContextItem,
+    createNdjsonParser,
     localTranslateNotReadyResult,
     rememberContextItems,
     reset: () => contextMemory.clear()
   }
+
+  document.addEventListener('@ZaDark:CONV_ID_CHANGE', () => {
+    activeTranslations.forEach((controller) => controller.abort())
+    activeTranslations.clear()
+  })
 
   const LANGUAGES = [
     {

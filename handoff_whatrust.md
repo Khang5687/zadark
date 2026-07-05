@@ -144,6 +144,14 @@ Current production model baseline:
 - Size: `2377945600` bytes.
 - SHA-256: `95c62e1c29f977c84fe5a5d9602a91213fd03a2c7b63f2884abab2ed7b5c5f57`.
 
+High-memory Apple Silicon option:
+
+- Model: TranslateGemma 12B Q4_K_M.
+- Revision: `fdf84c9f6fe14e69d58814f14e7b5b63bb6a1b28`.
+- Size: `7300794112` bytes.
+- SHA-256: `b7aac4b4be7ab0c49b6556c29c4467e74313df7f1e95d9f9676bb2adf0afa528`.
+- ZaDark auto-selects it only with at least 24 GB RAM; other targets retain 4B.
+
 Also present as a manifest option:
 
 - MLX snapshot repo: `mlx-community/translategemma-4b-it-4bit_immersive-translate`.
@@ -549,7 +557,7 @@ Goal: release confidence.
 
 Recent checks that have passed during this work:
 
-- `npm test`: 64 tests passing.
+- `npm test`: 65 tests passing.
 - `node src/pc/local-translate/backend.js --self-check`: passing.
 - `standard` on touched JS files: passing.
 - `npm run build`: passing, with an existing Node `fs.Stats` deprecation warning.
@@ -561,10 +569,9 @@ Recent checks that have passed during this work:
 - A real translation returned Vietnamese output.
 - Cache hit was observed on repeat translation.
 - Delete model path was tested and removed model data.
-- A 2026-07-05 non-UI recheck confirmed that the backend still detects the
-  Apple Silicon host, selects the Metal llama.cpp variant, finds the bundled
-  27 MB runtime, and reports the deleted GGUF as not installed. A translation
-  request then returned `Model is not installed` without starting a download.
+- A 2026-07-06 non-UI integration check confirmed that a 32 GB Apple Silicon
+  host selects the 12B Metal variant, finds its verified GGUF and bundled 27 MB
+  runtime, cold-starts it, and returns the corrected payment translation.
 - Speaker-aware context tests cover group labels, own messages as `[Me]`,
   same-chat memory isolation, selected-message exclusion, and image/voice
   placeholders.
@@ -582,11 +589,26 @@ Recent checks that have passed during this work:
   July`, suppressed an ordinary invoice sentence, and hit the memory cache on
   repeat generation.
 
+### Vietnamese model benchmark
+
+ZaDark has a reproducible 30-case product benchmark in `benchmarks/`. On a
+32 GB Apple Silicon Mac, using the same llama.cpp runtime and production prompt:
+
+- 4B Q4_K_S: 33/60 preliminary adequacy, 732 ms median, 1,373 ms p95.
+- 12B Q4_K_M: 50/60 preliminary adequacy, 2,312 ms median, 4,608 ms p95.
+- 12B fixed severe direction, context-copying, omitted-subject, reply-reference,
+  image-context, and Tet failures. Both models still missed sarcasm.
+
+These are one-evaluator product scores, not published benchmark claims. WhatRust
+should port the cases and runner shape, then benchmark its own chosen runtime;
+it should not copy ZaDark's 24 GB threshold without measuring Rust-process and
+WebView memory on its supported hardware.
+
 ## Known ZaDark Rough Edges
 
 - Legal compliance is not done. The current checkbox/notice is not a substitute
   for release legal review.
-- The model is large, around 2.4 GB for the current GGUF.
+- Model storage is about 2.4 GB for 4B or 7.3 GB for the high-memory 12B option.
 - Source auto-detection is prompt/model-driven, not a deterministic language ID
   pipeline.
 - Context improves disambiguation only heuristically and only for messages

@@ -518,6 +518,31 @@ describe('local translate backend', () => {
     expect(selected.id).toBe('downloadable-fallback')
   })
 
+  it('does not auto-select a model that needs more memory than the machine has', () => {
+    const hardware = backend.detectHardware()
+    const selected = backend.selectVariant({
+      variants: [
+        {
+          id: 'too-large',
+          platform: hardware.platform,
+          arch: hardware.arch,
+          accelerator: hardware.accelerator,
+          minMemoryGb: hardware.totalMemGb + 1,
+          serverCommand: process.execPath
+        },
+        {
+          id: 'fits',
+          platform: hardware.platform,
+          arch: hardware.arch,
+          accelerator: 'cpu',
+          serverCommand: process.execPath
+        }
+      ]
+    })
+
+    expect(selected.id).toBe('fits')
+  })
+
   it('never selects a downloadable runtime for another platform', () => {
     const hardware = backend.detectHardware()
     const selected = backend.selectVariant({

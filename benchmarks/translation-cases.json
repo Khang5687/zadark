@@ -1,0 +1,232 @@
+[
+  {
+    "id": "payment-direction",
+    "source": "en",
+    "target": "vi",
+    "text": "OK, I'll send you a payment to give me a couple days because right now. It's the Fourth of July holiday weekend. I can't do anything until Monday.",
+    "focus": "Payment direction, who needs extra time, and the US holiday"
+  },
+  {
+    "id": "account-direction",
+    "source": "en",
+    "target": "vi",
+    "text": "The account that I'm paying you from is the same account I'm receiving from Amazon, so sometimes there's money in that account and sometimes I have to transfer.",
+    "preserve": ["Amazon"],
+    "focus": "Who pays whom and where the money comes from"
+  },
+  {
+    "id": "document-transfer",
+    "source": "en",
+    "target": "vi",
+    "text": "I am set up to send for Jessica, but she's going to need to transfer the documents.",
+    "preserve": ["Jessica"],
+    "focus": "Resolve she to Jessica without inventing a relationship"
+  },
+  {
+    "id": "deadline-negation",
+    "source": "en",
+    "target": "vi",
+    "text": "Don't submit the VAT return until Peter confirms the figures.",
+    "preserve": ["Peter"],
+    "focus": "Negation and action ordering"
+  },
+  {
+    "id": "conditional-payment",
+    "source": "en",
+    "target": "vi",
+    "text": "If the refund doesn't arrive by Friday, pay the supplier from the backup account.",
+    "focus": "Condition, deadline, and payment source"
+  },
+  {
+    "id": "numbers-currency",
+    "source": "en",
+    "target": "vi",
+    "text": "Please invoice EUR 12,450.75, not EUR 12,540.75, under PO-8841.",
+    "preserve": ["PO-8841"],
+    "focus": "Exact numbers, negation, and identifier"
+  },
+  {
+    "id": "url-email",
+    "source": "en",
+    "target": "vi",
+    "text": "Send the draft to ops@example.com and upload it at https://example.com/a?x=1.",
+    "preserve": ["ops@example.com", "https://example.com/a?x=1"],
+    "focus": "Exact email and URL"
+  },
+  {
+    "id": "idiom-ball-court",
+    "source": "en",
+    "target": "vi",
+    "text": "I've sent the revised contract, so the ball is in their court now.",
+    "focus": "Natural idiom rather than literal ball/court wording"
+  },
+  {
+    "id": "idiom-circle-back",
+    "source": "en",
+    "target": "vi",
+    "text": "Let's circle back after the client has slept on it.",
+    "focus": "Two business idioms"
+  },
+  {
+    "id": "slang-gonna",
+    "source": "en",
+    "target": "vi",
+    "text": "I'm gonna head out. Ping me if anything blows up.",
+    "focus": "Informal tone and nonliteral emergency wording"
+  },
+  {
+    "id": "private-pronoun-female",
+    "source": "en",
+    "target": "vi",
+    "context": ["[Lan] I will ask Minh about the invoice.", "[Me] Thanks, Lan."],
+    "text": "She said he already paid it.",
+    "focus": "Use context for female/male referents without adding facts"
+  },
+  {
+    "id": "private-omitted-subject",
+    "source": "vi",
+    "target": "en",
+    "context": ["[Anh Nam] Em gửi báo giá chưa?", "[Tôi] Em đang kiểm tra lại."],
+    "text": "Gửi rồi anh nhé.",
+    "focus": "Recover first-person subject and respectful tone"
+  },
+  {
+    "id": "kinship-workplace-anh",
+    "source": "vi",
+    "target": "en",
+    "context": ["[Hùng] Mai em có rảnh không?", "[Mai] Dạ có anh."],
+    "text": "Anh gửi em file nhé.",
+    "focus": "Workplace pronouns must not become literal siblings"
+  },
+  {
+    "id": "kinship-workplace-chi",
+    "source": "vi",
+    "target": "en",
+    "context": ["[Linh] Chị Hoa đang giữ hợp đồng."],
+    "text": "Nhờ chị ký giúp em với ạ.",
+    "focus": "Polite request and contextual female addressee"
+  },
+  {
+    "id": "group-speaker-resolution",
+    "source": "en",
+    "target": "vi",
+    "context": ["[Anna] Ben has the final spreadsheet.", "[Chris] I only have the old copy."],
+    "text": "Ask him to send it to me before lunch.",
+    "focus": "Resolve him to Ben and me to the current speaker"
+  },
+  {
+    "id": "group-ambiguous-pronoun",
+    "source": "en",
+    "target": "vi",
+    "context": ["[Anna] Ben and Chris both reviewed it."],
+    "text": "He said it was fine.",
+    "focus": "Do not invent which man when context is ambiguous"
+  },
+  {
+    "id": "group-own-message",
+    "source": "vi",
+    "target": "en",
+    "context": ["[Lan] Ai sẽ gọi khách hàng?", "[Minh] Tớ đang bận."],
+    "text": "Để mình gọi cho.",
+    "focus": "Own-message first person and volunteered action"
+  },
+  {
+    "id": "reply-reference",
+    "source": "en",
+    "target": "vi",
+    "context": ["[Peter] The blue shipment is delayed.", "[Me] What about the red one?"],
+    "text": "That one left yesterday.",
+    "focus": "Resolve that one to the red shipment"
+  },
+  {
+    "id": "media-image-context",
+    "source": "vi",
+    "target": "en",
+    "context": ["[Lan] [đã gửi một hình ảnh]", "[Tôi] Hóa đơn trong ảnh bị mờ."],
+    "text": "Để mình chụp lại nhé.",
+    "focus": "Infer retaking the photo without translating media placeholder"
+  },
+  {
+    "id": "media-voice-context",
+    "source": "vi",
+    "target": "en",
+    "context": ["[Nam] [đã gửi tin nhắn thoại]", "[Tôi] Mình nghe không rõ."],
+    "text": "Để tôi nói lại.",
+    "focus": "Natural response to an unclear voice message"
+  },
+  {
+    "id": "ocr-spacing",
+    "source": "en",
+    "target": "vi",
+    "text": "TOTAL DUE: USD 1,280.00\nPAY BY: 07/15/2026\nINVOICE N0. A-1098",
+    "preserve": ["A-1098"],
+    "focus": "OCR line breaks, common O/0 error, and exact values"
+  },
+  {
+    "id": "ocr-broken-words",
+    "source": "en",
+    "target": "vi",
+    "text": "Please trans fer the docu ments to Jesslca before 5 PM.",
+    "focus": "Recover OCR word breaks and likely Jessica typo conservatively"
+  },
+  {
+    "id": "cultural-thanksgiving",
+    "source": "en",
+    "target": "vi",
+    "text": "The office will be closed for Thanksgiving, but the warehouse will reopen Friday.",
+    "focus": "Cultural holiday and reopening date"
+  },
+  {
+    "id": "cultural-tet",
+    "source": "vi",
+    "target": "en",
+    "text": "Bên em nghỉ từ 28 Tết đến mùng 6.",
+    "focus": "Vietnamese lunar-calendar dates without false Gregorian dates"
+  },
+  {
+    "id": "politeness-da-a",
+    "source": "vi",
+    "target": "en",
+    "text": "Dạ, em đã nhận được rồi ạ. Em cảm ơn anh.",
+    "focus": "Politeness and natural English without literal particles"
+  },
+  {
+    "id": "sarcasm",
+    "source": "en",
+    "target": "vi",
+    "context": ["[Boss] The server failed for the third time today."],
+    "text": "Great, exactly what we needed.",
+    "focus": "Preserve sarcasm rather than positive approval"
+  },
+  {
+    "id": "mixed-language",
+    "source": "en",
+    "target": "vi",
+    "text": "Please update the landing page CTA, nhưng đừng deploy trước khi tôi duyệt.",
+    "preserve": ["CTA"],
+    "focus": "Mixed English/Vietnamese and deployment prohibition"
+  },
+  {
+    "id": "technical-terms",
+    "source": "en",
+    "target": "vi",
+    "text": "Rotate the API key, invalidate all active sessions, and do not log the token.",
+    "preserve": ["API"],
+    "focus": "Security terminology and three distinct actions"
+  },
+  {
+    "id": "legal-modal",
+    "source": "en",
+    "target": "vi",
+    "text": "The tenant may terminate the agreement, but must give 30 days' written notice.",
+    "preserve": ["30"],
+    "focus": "May versus must and written-notice requirement"
+  },
+  {
+    "id": "emoji-tone",
+    "source": "vi",
+    "target": "en",
+    "text": "Ừ, để mai tính tiếp 😅 chứ giờ hết cứu rồi.",
+    "focus": "Casual resigned tone and emoji"
+  }
+]

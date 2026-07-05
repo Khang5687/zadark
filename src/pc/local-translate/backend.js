@@ -657,7 +657,8 @@ function selectVariant (manifest, requestedId) {
     .sort((a, b) => scoreVariant(b, hardware) - scoreVariant(a, hardware))
   const compatible = ranked.filter((variant) => {
     return (variant.platform === '*' || variant.platform === hardware.platform) &&
-      (variant.arch === '*' || variant.arch === hardware.arch)
+      (variant.arch === '*' || variant.arch === hardware.arch) &&
+      (!variant.minMemoryGb || hardware.totalMemGb >= variant.minMemoryGb)
   })
   return compatible.find((variant) => runtimeStatus(variant).available || isRuntimeDownloadable(variant)) ||
     compatible[0] ||
@@ -1788,6 +1789,7 @@ function selfCheck () {
   assert(llamaVariant.id === 'desktop-llamacpp-translategemma-4b-q4')
   assert(fs.existsSync(replaceArgTokens(llamaVariant.serverArgs[llamaVariant.serverArgs.length - 1], llamaVariant, os.tmpdir())))
   const runtimeVariantIds = [
+    'macos-arm64-llamacpp-translategemma-12b-q4',
     'macos-arm64-llamacpp-translategemma-4b-q4',
     'macos-x64-llamacpp-translategemma-4b-q4',
     'windows-x64-llamacpp-translategemma-4b-q4',

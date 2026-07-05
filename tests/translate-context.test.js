@@ -95,4 +95,36 @@ describe('local translate context', () => {
     expect(window.ZaDarkTranslateContext.formatContextItem(window.ZaDarkTranslateContext.contextItemFromElement(image))).toBe('[Alice] sent an image')
     expect(window.ZaDarkTranslateContext.formatContextItem(window.ZaDarkTranslateContext.contextItemFromElement(voice))).toBe('[Bob] sent a voice message')
   })
+
+  it('uses Zalo-like React props for direction and speaker when available', () => {
+    const incoming = document.createElement('div')
+    incoming.className = 'card'
+    incoming.innerHTML = '<span-15>Hello</span-15>'
+    incoming.__reactFiberTest = {
+      memoizedProps: {
+        senderName: 'Minh',
+        data: { fromUid: '123' }
+      }
+    }
+
+    const outgoing = document.createElement('div')
+    outgoing.className = 'card'
+    outgoing.innerHTML = '<span-15>Hi</span-15>'
+    outgoing.__reactFiberTest = {
+      memoizedProps: {
+        data: { fromUid: '0' }
+      }
+    }
+
+    expect(window.ZaDarkTranslateContext.formatContextItem(window.ZaDarkTranslateContext.contextItemFromElement(incoming))).toBe('[Minh] Hello')
+    expect(window.ZaDarkTranslateContext.formatContextItem(window.ZaDarkTranslateContext.contextItemFromElement(outgoing))).toBe('[Me] Hi')
+  })
+
+  it('treats Zalo sound cards as voice messages', () => {
+    const sound = document.createElement('div')
+    sound.className = 'card card--sound'
+    sound.setAttribute('data-sender-name', 'Lan')
+
+    expect(window.ZaDarkTranslateContext.formatContextItem(window.ZaDarkTranslateContext.contextItemFromElement(sound))).toBe('[Lan] sent a voice message')
+  })
 })

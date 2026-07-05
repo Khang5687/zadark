@@ -60,7 +60,32 @@
     return String(node && node.className && typeof node.className === 'string' ? node.className : '').toLowerCase()
   }
 
+  const reactProps = (node) => {
+    if (!node) return {}
+    const key = Object.keys(node).find((key) => key.startsWith('__reactInternalInstance') || key.startsWith('__reactFiber'))
+    const fiber = key && node[key]
+    return (fiber && (fiber.memoizedProps || fiber.pendingProps)) || {}
+  }
+
+  const messageProps = (messageEl) => {
+    let current = messageEl
+    for (let i = 0; current && i < 5; i++) {
+      const props = reactProps(current)
+      if (props.data || props.message || props.senderName || props.sentByMe !== undefined || props.fromMe !== undefined) return props
+      current = current.parentElement
+    }
+    return {}
+  }
+
   const inferDirection = (messageEl) => {
+    const props = messageProps(messageEl)
+    const data = props.data || props.message || {}
+    if (props.sentByMe === true || props.fromMe === true || props.isMe === true || props.isSelf === true) return 'outgoing'
+    if (data.fromMe === true || data.isMe === true || data.isSelf === true || String(data.fromUid || '') === '0') return 'outgoing'
+
+    if (messageEl.getAttribute('data-from-me') === 'true' || messageEl.getAttribute('data-is-me') === 'true') return 'outgoing'
+    if (messageEl.getAttribute('data-from-me') === 'false' || messageEl.getAttribute('data-is-me') === 'false') return 'incoming'
+
     const classes = classText(messageEl).split(/\s+/)
     if (classes.some((name) => /(^|[-_])(me|mine|self|sent|send|outgoing|right)($|[-_])/.test(name))) return 'outgoing'
     if (classes.some((name) => /(^|[-_])(other|incoming|left)($|[-_])/.test(name))) return 'incoming'
@@ -70,10 +95,18 @@
   const inferSpeaker = (messageEl, direction) => {
     if (direction === 'outgoing') return 'Me'
 
+    const props = messageProps(messageEl)
+    const data = props.data || props.message || {}
     const explicit = messageEl && (
       messageEl.getAttribute('data-sender-name') ||
       messageEl.getAttribute('data-author') ||
-      messageEl.getAttribute('aria-label')
+      messageEl.getAttribute('aria-label') ||
+      props.senderName ||
+      props.displayName ||
+      data.senderName ||
+      data.displayName ||
+      data.fromD ||
+      data.fromDName
     )
     if (explicit) return normalizeContextText(explicit).slice(0, 40)
 
@@ -89,7 +122,7 @@
   const mediaPlaceholder = (messageEl) => {
     if (!messageEl) return ''
     const classes = classText(messageEl)
-    if (/(voice|audio)/.test(classes) || messageEl.querySelector('[class*="voice"],[class*="audio"],audio')) return 'sent a voice message'
+    if (/(voice|audio|card--sound)/.test(classes) || messageEl.querySelector('[class*="voice"],[class*="audio"],[class*="card--sound"],audio')) return 'sent a voice message'
     if (/(file|attach|document)/.test(classes) || messageEl.querySelector('[class*="file"],[class*="attach"],[class*="document"]')) {
       const fileName = firstText(messageEl, ['[class*="file"]', '[class*="document"]'])
       return fileName ? `sent file: ${fileName}` : 'sent a file'

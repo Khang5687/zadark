@@ -599,7 +599,7 @@ Goal: release confidence.
 
 Recent checks that have passed during this work:
 
-- `npm test`: 65 tests passing.
+- `npm test`: 75 tests passing.
 - `node src/pc/local-translate/backend.js --self-check`: passing.
 - `standard` on touched JS files: passing.
 - `npm run build`: passing, with an existing Node `fs.Stats` deprecation warning.
@@ -631,6 +631,10 @@ Recent checks that have passed during this work:
 - Real footnote generation returned a Vietnamese explanation for `Fourth of
   July`, suppressed an ordinary invoice sentence, and hit the memory cache on
   repeat generation.
+- A packaged-app probe after installation confirmed that the loopback backend
+  starts, defaults to TranslateGemma 4B, exposes 4B/12B model choices, lists
+  exactly OpenAI/Groq/xAI/Mistral/OpenRouter/Custom, and never returns API key
+  fields to the renderer.
 
 ### Vietnamese model benchmark
 

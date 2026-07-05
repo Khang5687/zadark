@@ -1976,8 +1976,12 @@ function selfCheck () {
     'linux-x64-llamacpp-translategemma-12b-q4',
     'linux-x64-llamacpp-translategemma-4b-q4'
   ]
-  runtimeVariantIds.forEach((id) => assert(isRuntimeDownloadable(selectVariant(manifest, id))))
-  assert(variantStatus(selectVariant(manifest, 'macos-arm64-mlx-translategemma-4b-q4'), os.tmpdir()).downloadable)
+  runtimeVariantIds.forEach((id) => {
+    const variant = manifest.variants.find((item) => item.id === id)
+    assert(variant && isRuntimeDownloadable(variant))
+  })
+  const mlxVariant = manifest.variants.find((item) => item.id === 'macos-arm64-mlx-translategemma-4b-q4')
+  assert(mlxVariant && variantStatus(mlxVariant, os.tmpdir()).downloadable)
   assert(variantStatus(selectVariant(manifest, 'desktop-llamacpp-translategemma-4b-q4'), os.tmpdir()).downloadable)
   assert(!runtimeStatus({ serverCommand: '__zadark_missing_runtime__' }).available)
   assert(resolveRuntimeCommand({ runtimeCandidates: [process.execPath] }) === process.execPath)

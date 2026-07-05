@@ -221,6 +221,27 @@ Current context behavior:
 Important caveat: context is heuristic. It can help disambiguate, but it is not
 guaranteed. It should not be described to users as "learning" or "indexing".
 
+### Deferred Media AI Roadmap
+
+ZaDark should not add voice/image AI to the first local translation release.
+Current media handling stays text-only: captions and short placeholders.
+
+Research verdict for a later version:
+
+- Use separate specialized optional packs, not one large unified multimodal
+  model.
+- OCR should come before general image captioning. First candidate:
+  Tesseract 5 plus Vietnamese traineddata, downloaded only if the user enables
+  image text translation.
+- Voice should be a separate explicit action. First candidate: whisper.cpp plus
+  a quantized Whisper large-v3-turbo model. PhoWhisper can be considered later
+  as a Vietnamese-enhanced pack if testing shows normal Whisper is weak.
+- Vision captioning should be later than OCR/voice. First small candidate:
+  SmolVLM-256M-Instruct through ONNX Runtime.
+- No voice/image model should scan all media in the background. These models
+  should run only after explicit user action or a clearly labeled per-chat
+  opt-in.
+
 ### Legal And Terms Handling
 
 Current official references checked on 2026-07-05:

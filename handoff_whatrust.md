@@ -485,7 +485,7 @@ Goal: release confidence.
 
 Recent checks that have passed during this work:
 
-- `npm test`: 47 tests passing.
+- `npm test`: 48 tests passing.
 - `node src/pc/local-translate/backend.js --self-check`: passing.
 - `standard` on touched JS files: passing.
 - `npm run build`: passing, with an existing Node `fs.Stats` deprecation warning.

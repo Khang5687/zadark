@@ -82,6 +82,19 @@ describe('local translate context', () => {
     expect(context).toEqual(['[Alice] Okay.'])
   })
 
+  it('caps visible context to the last 12 messages before the selected message', () => {
+    document.body.innerHTML = Array.from({ length: 14 }, (_, index) => {
+      return `<div class="card incoming" data-sender-name="Alice"><span-15>Message ${index}</span-15></div>`
+    }).join('') + '<div class="card incoming" data-sender-name="Alice"><span-15>Selected</span-15></div>'
+
+    const cards = document.querySelectorAll('.card')
+    const context = window.ZaDarkTranslateContext.collectLocalTranslateContext(cards[cards.length - 1], 'Selected')
+
+    expect(context).toHaveLength(12)
+    expect(context[0]).toBe('[Alice] Message 2')
+    expect(context[11]).toBe('[Alice] Message 13')
+  })
+
   it('reads newer Zalo div-15 text nodes', () => {
     document.body.innerHTML = '<div class="card incoming" data-sender-name="Alice"><div-15>New text node.</div-15></div>'
 

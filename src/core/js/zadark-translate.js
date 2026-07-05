@@ -2,6 +2,7 @@
   const ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY = '@ZaDark:LOCAL_TRANSLATE_STORAGE_PATH'
   const ZADARK_LOCAL_TRANSLATE_VARIANT_KEY = '@ZaDark:LOCAL_TRANSLATE_VARIANT'
   const ZADARK_TRANSLATE_FOOTNOTES_KEY = '@ZaDark:TRANSLATE_FOOTNOTES'
+  const ZADARK_TRANSLATE_ENGINE_KEY = '@ZaDark:TRANSLATE_ENGINE'
 
   const getTranslateApiURL = () => {
     if (document.body.classList.contains('zadark-pc')) {
@@ -12,6 +13,12 @@
   }
 
   const isLocalTranslate = () => document.body.classList.contains('zadark-pc')
+
+  const getTranslateEngine = () => {
+    return isLocalTranslate() && localStorage.getItem(ZADARK_TRANSLATE_ENGINE_KEY) === 'cloud' ? 'cloud' : 'local'
+  }
+
+  const translationEnginePayload = () => isLocalTranslate() ? { engine: getTranslateEngine() } : {}
 
   const getLocalTranslateStoragePath = () => {
     return localStorage.getItem(ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY) || ''
@@ -31,7 +38,7 @@
   }
 
   const isTranslateFootnotesEnabled = () => {
-    return isLocalTranslate() && localStorage.getItem(ZADARK_TRANSLATE_FOOTNOTES_KEY) !== 'false'
+    return isLocalTranslate() && getTranslateEngine() === 'local' && localStorage.getItem(ZADARK_TRANSLATE_FOOTNOTES_KEY) !== 'false'
   }
 
   const formatBytes = (bytes) => {
@@ -591,8 +598,10 @@
   }
 
   const streamLocalTranslate = async (text, target, context, signal, onEvent) => {
-    const readiness = await ensureLocalTranslateReady()
-    if (readiness !== true) return localTranslateNotReadyResult(readiness, localTranslateNotReadyMessage)
+    if (getTranslateEngine() === 'local') {
+      const readiness = await ensureLocalTranslateReady()
+      if (readiness !== true) return localTranslateNotReadyResult(readiness, localTranslateNotReadyMessage)
+    }
 
     const response = await fetch(getTranslateApiURL() + '/translate/stream', {
       method: 'POST',
@@ -603,6 +612,7 @@
       body: JSON.stringify({
         text,
         target,
+        ...translationEnginePayload(),
         ...localTranslateStoragePayload(),
         ...(context.length ? { context } : {})
       })
@@ -642,9 +652,11 @@
 
   const translate = async (text, target, context = []) => {
     try {
-      const readiness = await ensureLocalTranslateReady()
-      if (readiness !== true) {
-        return localTranslateNotReadyResult(readiness, localTranslateNotReadyMessage)
+      if (getTranslateEngine() === 'local') {
+        const readiness = await ensureLocalTranslateReady()
+        if (readiness !== true) {
+          return localTranslateNotReadyResult(readiness, localTranslateNotReadyMessage)
+        }
       }
 
       const res = await fetch(getTranslateApiURL() + '/translate', {
@@ -655,6 +667,7 @@
         body: JSON.stringify({
           text,
           target,
+          ...translationEnginePayload(),
           ...localTranslateStoragePayload(),
           ...(isLocalTranslate() && context.length ? { context } : {})
         })
@@ -964,6 +977,8 @@
     isTranslateFootnotesEnabled,
     getLocalTranslateStatus,
     getLocalTranslateVariant,
+    getTranslateEngine,
+    translationEnginePayload,
     showLocalTranslateSetup,
     rememberContextItems,
     reset: () => contextMemory.clear()

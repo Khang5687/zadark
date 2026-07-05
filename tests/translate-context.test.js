@@ -15,6 +15,7 @@ function loadTranslateContext () {
 
 describe('local translate context', () => {
   beforeEach(() => {
+    localStorage.removeItem('@ZaDark:TRANSLATE_ENGINE')
     document.body.innerHTML = ''
     loadTranslateContext()
   })
@@ -216,6 +217,19 @@ describe('local translate context', () => {
 
     localStorage.setItem('@ZaDark:TRANSLATE_FOOTNOTES', 'false')
     expect(window.ZaDarkTranslateContext.isTranslateFootnotesEnabled()).toBe(false)
+
+    localStorage.removeItem('@ZaDark:TRANSLATE_FOOTNOTES')
+    localStorage.setItem('@ZaDark:TRANSLATE_ENGINE', 'cloud')
+    expect(window.ZaDarkTranslateContext.isTranslateFootnotesEnabled()).toBe(false)
+  })
+
+  it('uses local translation by default and sends an explicit cloud selection', () => {
+    expect(window.ZaDarkTranslateContext.getTranslateEngine()).toBe('local')
+    expect(window.ZaDarkTranslateContext.translationEnginePayload()).toEqual({ engine: 'local' })
+
+    localStorage.setItem('@ZaDark:TRANSLATE_ENGINE', 'cloud')
+    expect(window.ZaDarkTranslateContext.getTranslateEngine()).toBe('cloud')
+    expect(window.ZaDarkTranslateContext.translationEnginePayload()).toEqual({ engine: 'cloud' })
   })
 
   it('sends the explicitly selected local model with translation requests', () => {

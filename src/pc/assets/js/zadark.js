@@ -79,6 +79,7 @@
   const ZADARK_TRANSLATE_FOOTNOTES_KEY = '@ZaDark:TRANSLATE_FOOTNOTES'
   const ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY = '@ZaDark:LOCAL_TRANSLATE_STORAGE_PATH'
   const ZADARK_LOCAL_TRANSLATE_VARIANT_KEY = '@ZaDark:LOCAL_TRANSLATE_VARIANT'
+  const ZADARK_TRANSLATE_ENGINE_KEY = '@ZaDark:TRANSLATE_ENGINE'
   const ZADARK_THREAD_CHAT_BG_KEY = 'THREAD_CHAT_BG' // localforage key
   const getLocalTranslateApiUrl = () => window.ZADARK_LOCAL_TRANSLATE_API_URL || 'http://127.0.0.1:5555/v1'
 
@@ -260,6 +261,12 @@
     },
     getLocalTranslateVariant: () => {
       return localStorage.getItem(ZADARK_LOCAL_TRANSLATE_VARIANT_KEY) || ''
+    },
+    saveTranslateEngine: (engine) => {
+      return localStorage.setItem(ZADARK_TRANSLATE_ENGINE_KEY, engine === 'cloud' ? 'cloud' : 'local')
+    },
+    getTranslateEngine: () => {
+      return localStorage.getItem(ZADARK_TRANSLATE_ENGINE_KEY) === 'cloud' ? 'cloud' : 'local'
     },
 
     /**
@@ -1350,6 +1357,16 @@
   const selectFontSizeElName = '#js-select-font-size'
   const selectTranslateTargetElName = '#js-select-translate-target'
   const switchTranslateFootnotesElName = '#js-switch-translate-footnotes'
+  const translateFootnotesSettingElName = '#js-translate-footnotes-setting'
+  const translateEngineElName = 'input[name="zadark-translate-engine"]'
+  const localTranslateSettingsElName = '#js-local-translate-settings'
+  const cloudTranslateSettingsElName = '#js-cloud-translate-settings'
+  const cloudProviderElName = '#js-cloud-translate-provider'
+  const cloudModelElName = '#js-cloud-translate-model'
+  const cloudBaseUrlElName = '#js-cloud-translate-base-url'
+  const cloudBaseUrlRowElName = '#js-cloud-translate-base-url-row'
+  const cloudApiKeyElName = '#js-cloud-translate-api-key'
+  const cloudStatusElName = '#js-cloud-translate-status'
   const localTranslateStatusElName = '#js-local-translate-status'
   const localTranslateModelsElName = '#js-local-translate-models'
   const localTranslateProgressElName = '#js-local-translate-progress'
@@ -1562,6 +1579,61 @@
     })
   }
 
+  let cloudProviders = []
+
+  const cloudTranslateRequest = async (pathname, options = {}) => {
+    const res = await fetch(`${getLocalTranslateApiUrl()}${pathname}`, options)
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.message || 'Không thể kết nối dịch vụ dịch')
+    return json
+  }
+
+  const renderCloudTranslateConfig = (config) => {
+    cloudProviders = config.providers || cloudProviders
+    const $provider = $(cloudProviderElName).empty()
+    cloudProviders.forEach((provider) => $provider.append($('<option>').val(provider.id).text(provider.name)))
+    $provider.val(config.provider)
+    $(cloudModelElName).val(config.model || '')
+    $(cloudBaseUrlElName).val(config.provider === 'custom' ? config.baseUrl || '' : '')
+    $(cloudBaseUrlRowElName).prop('hidden', config.provider !== 'custom')
+    $(cloudApiKeyElName).val('').attr('placeholder', config.hasApiKey ? 'Đã lưu an toàn' : 'Nhập API key')
+    $(cloudStatusElName).text(config.hasApiKey ? 'API key đã được lưu an toàn trên máy.' : 'Chưa lưu API key.')
+  }
+
+  const loadCloudTranslateConfig = async () => {
+    try {
+      renderCloudTranslateConfig(await cloudTranslateRequest('/cloud-translate/config'))
+    } catch (error) {
+      $(cloudStatusElName).text(error.message)
+    }
+  }
+
+  const cloudConfigPayload = () => ({
+    provider: $(cloudProviderElName).val(),
+    model: $(cloudModelElName).val().trim(),
+    baseUrl: $(cloudBaseUrlElName).val().trim(),
+    ...($(cloudApiKeyElName).val().trim() ? { apiKey: $(cloudApiKeyElName).val().trim() } : {})
+  })
+
+  const saveCloudTranslateConfig = async () => {
+    const config = await cloudTranslateRequest('/cloud-translate/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cloudConfigPayload())
+    })
+    renderCloudTranslateConfig(config)
+    return config
+  }
+
+  const setTranslateEngineUI = (engine) => {
+    const cloud = engine === 'cloud'
+    $(translateEngineElName).filter(`[value="${cloud ? 'cloud' : 'local'}"]`).prop('checked', true)
+    $(localTranslateSettingsElName).prop('hidden', cloud)
+    $(cloudTranslateSettingsElName).prop('hidden', !cloud)
+    $(translateFootnotesSettingElName).toggleClass('zadark-switch--disabled', cloud)
+    $(switchTranslateFootnotesElName).prop('disabled', cloud)
+  }
+
   const getLocalOcrStatus = async () => {
     const storagePath = ZaDarkStorage.getLocalTranslateStoragePath()
     const query = storagePath ? `?storagePath=${encodeURIComponent(storagePath)}` : ''
@@ -1706,13 +1778,18 @@
           <div class="font-settings">
             <label class="font-settings__label" style="flex: 1;">
               Dịch tin nhắn
-              <i class="zadark-icon zadark-icon--question" data-tippy-content='<p>Bạn di chuyển chuột vào đoạn tin nhắn và chọn biểu tượng <i class="zadark-icon zadark-icon--translate" style="position: relative; top: 3px; font-size: 18px;"></i> để dịch tin nhắn.</p><p>Trên ZaDark PC, model AI chạy cục bộ trên máy tính của bạn.</p>'></i>
+              <i class="zadark-icon zadark-icon--question" data-tippy-content='<p>Bạn di chuyển chuột vào đoạn tin nhắn và chọn biểu tượng <i class="zadark-icon zadark-icon--translate" style="position: relative; top: 3px; font-size: 18px;"></i> để dịch tin nhắn.</p><p>Bạn có thể dịch riêng tư trên máy hoặc dùng API đám mây.</p>'></i>
             </label>
 
             <select id="js-select-translate-target" class="zadark-select"></select>
           </div>
 
-          <div class="zadark-switch">
+          <fieldset class="zadark-translate-engine" aria-label="Cách xử lý bản dịch">
+            <label><input type="radio" name="zadark-translate-engine" value="local"> Trên máy</label>
+            <label><input type="radio" name="zadark-translate-engine" value="cloud"> API đám mây</label>
+          </fieldset>
+
+          <div id="js-translate-footnotes-setting" class="zadark-switch">
             <label class="zadark-switch__label zadark-switch__label--helper" for="js-switch-translate-footnotes">
               Ghi chú ngữ cảnh do AI tạo
               <i class="zadark-icon zadark-icon--question" data-tippy-content="Giải thích ngắn các thành ngữ, chữ viết tắt và tham chiếu văn hoá bên dưới bản dịch."></i>
@@ -1723,32 +1800,61 @@
             </label>
           </div>
 
-          <div class="font-settings font-settings--compact">
-            <label id="js-local-translate-status" class="font-settings__label font-settings__label--muted" style="flex: 1;">
-              Model dịch: đang kiểm tra...
-            </label>
+          <div id="js-local-translate-settings">
+            <div class="font-settings font-settings--compact">
+              <label id="js-local-translate-status" class="font-settings__label font-settings__label--muted" style="flex: 1;">
+                Model dịch: đang kiểm tra...
+              </label>
+            </div>
+
+            <div id="js-local-translate-models" class="zadark-translate-models" aria-live="polite"></div>
+
+            <div class="font-settings font-settings--compact">
+              <progress id="js-local-translate-progress" class="zadark-local-translate-progress" max="100" value="0" hidden></progress>
+            </div>
+
+            <div class="font-settings font-settings--compact">
+              <label id="js-local-ocr-status" class="font-settings__label font-settings__label--muted" style="flex: 1;">
+                OCR ảnh: đang kiểm tra...
+              </label>
+
+              <button id="js-button-delete-local-ocr" class="btn-del" disabled>Xoá OCR</button>
+            </div>
+
+            <div class="font-settings font-settings--compact">
+              <label class="font-settings__label font-settings__label--muted" style="flex: 1;">
+                Thư mục model
+              </label>
+
+              <input id="js-input-local-translate-storage-path" class="zadark-input" placeholder="Mặc định">
+            </div>
           </div>
 
-          <div id="js-local-translate-models" class="zadark-translate-models" aria-live="polite"></div>
-
-          <div class="font-settings font-settings--compact">
-            <progress id="js-local-translate-progress" class="zadark-local-translate-progress" max="100" value="0" hidden></progress>
-          </div>
-
-          <div class="font-settings font-settings--compact">
-            <label id="js-local-ocr-status" class="font-settings__label font-settings__label--muted" style="flex: 1;">
-              OCR ảnh: đang kiểm tra...
+          <div id="js-cloud-translate-settings" class="zadark-cloud-translate" hidden>
+            <p class="zadark-cloud-translate__notice">Tin nhắn và ngữ cảnh gần đây sẽ được gửi đến nhà cung cấp bạn chọn. Nhà cung cấp có thể tính phí.</p>
+            <label class="zadark-cloud-translate__field">
+              <span>Nhà cung cấp</span>
+              <select id="js-cloud-translate-provider" class="zadark-select"></select>
             </label>
-
-            <button id="js-button-delete-local-ocr" class="btn-del" disabled>Xoá OCR</button>
-          </div>
-
-          <div class="font-settings font-settings--compact">
-            <label class="font-settings__label font-settings__label--muted" style="flex: 1;">
-              Thư mục model
+            <label class="zadark-cloud-translate__field">
+              <span>Model</span>
+              <input id="js-cloud-translate-model" class="zadark-input" autocomplete="off">
             </label>
-
-            <input id="js-input-local-translate-storage-path" class="zadark-input" placeholder="Mặc định">
+            <label id="js-cloud-translate-base-url-row" class="zadark-cloud-translate__field" hidden>
+              <span>Địa chỉ API</span>
+              <input id="js-cloud-translate-base-url" class="zadark-input" type="url" placeholder="https://example.com/v1" autocomplete="off">
+            </label>
+            <label class="zadark-cloud-translate__field">
+              <span>API key</span>
+              <input id="js-cloud-translate-api-key" class="zadark-input" type="password" autocomplete="new-password">
+            </label>
+            <div class="zadark-cloud-translate__actions">
+              <button id="js-save-cloud-translate" type="button">Lưu</button>
+              <button id="js-test-cloud-translate" type="button">Kiểm tra kết nối</button>
+              <button id="js-delete-cloud-translate" type="button" class="btn-del">Xoá thông tin</button>
+            </div>
+            <div id="js-cloud-translate-status" class="zadark-cloud-translate__status" aria-live="polite"></div>
+            <p class="zadark-cloud-translate__hint">Ghi chú ngữ cảnh chỉ khả dụng khi dịch trên máy.</p>
           </div>
 
           <div class="font-settings">
@@ -2534,6 +2640,64 @@
       ZaDarkStorage.saveTranslateFootnotes($(this).is(':checked'))
     })
 
+    $(translateEngineElName).on('change', function () {
+      const engine = $(this).val()
+      ZaDarkStorage.saveTranslateEngine(engine)
+      setTranslateEngineUI(engine)
+      if (engine === 'cloud') loadCloudTranslateConfig()
+    })
+
+    $(cloudProviderElName).on('change', function () {
+      const provider = cloudProviders.find((item) => item.id === $(this).val())
+      $(cloudBaseUrlRowElName).prop('hidden', !provider || provider.id !== 'custom')
+      if (provider && provider.defaultModel) $(cloudModelElName).val(provider.defaultModel)
+      $(cloudApiKeyElName).val('').attr('placeholder', 'Nhập API key')
+      $(cloudStatusElName).text('Nhấn Lưu để áp dụng nhà cung cấp này.')
+    })
+
+    $('#js-save-cloud-translate').on('click', async function () {
+      const $button = $(this).prop('disabled', true)
+      try {
+        await saveCloudTranslateConfig()
+        ZaDarkUtils.showToast('Đã lưu dịch vụ dịch')
+      } catch (error) {
+        $(cloudStatusElName).text(error.message)
+      } finally {
+        $button.prop('disabled', false)
+      }
+    })
+
+    $('#js-test-cloud-translate').on('click', async function () {
+      const $button = $(this).prop('disabled', true)
+      $(cloudStatusElName).text('Đang kiểm tra kết nối...')
+      try {
+        await saveCloudTranslateConfig()
+        const result = await cloudTranslateRequest('/cloud-translate/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}'
+        })
+        $(cloudStatusElName).text(`Kết nối thành công (${result.latencyMs} ms).`)
+      } catch (error) {
+        $(cloudStatusElName).text(error.message)
+      } finally {
+        $button.prop('disabled', false)
+      }
+    })
+
+    $('#js-delete-cloud-translate').on('click', async function () {
+      const $button = $(this).prop('disabled', true)
+      try {
+        const config = await cloudTranslateRequest('/cloud-translate/config', { method: 'DELETE' })
+        renderCloudTranslateConfig(config)
+        ZaDarkUtils.showToast('Đã xoá thông tin API')
+      } catch (error) {
+        $(cloudStatusElName).text(error.message)
+      } finally {
+        $button.prop('disabled', false)
+      }
+    })
+
     $(inputLocalTranslateStoragePathElName).on('blur', handleLocalTranslateStoragePathChange)
     $(inputLocalTranslateStoragePathElName).on('keypress', function (event) {
       const isEnter = Number(event.keyCode ? event.keyCode : event.which) - 1 === 12
@@ -2665,8 +2829,10 @@
     loadKnownVersionState(buttonEl)
     loadPopupScrollEvent()
     loadTranslate()
+    setTranslateEngineUI(ZaDarkStorage.getTranslateEngine())
     loadLocalTranslateStoragePath()
     loadLocalTranslateStatus()
+    loadCloudTranslateConfig()
     document.addEventListener('@ZaDark:LOCAL_TRANSLATE_INSTALLING', () => {
       $(localTranslateSidebarProgressElName).prop('hidden', false)
       setTimeout(loadLocalTranslateStatus, 250)

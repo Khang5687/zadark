@@ -60,6 +60,15 @@
     return String(node && node.className && typeof node.className === 'string' ? node.className : '').toLowerCase()
   }
 
+  const messageFrame = (messageEl) => {
+    return (messageEl && messageEl.closest && messageEl.closest('.chat-message,[data-component="bubble-message"]')) || messageEl
+  }
+
+  const messageAttr = (messageEl, name) => {
+    const frame = messageFrame(messageEl)
+    return (messageEl && messageEl.getAttribute(name)) || (frame && frame !== messageEl && frame.getAttribute(name))
+  }
+
   const reactProps = (node) => {
     if (!node) return {}
     const key = Object.keys(node).find((key) => key.startsWith('__reactInternalInstance') || key.startsWith('__reactFiber'))
@@ -83,10 +92,11 @@
     if (props.sentByMe === true || props.fromMe === true || props.isMe === true || props.isSelf === true) return 'outgoing'
     if (data.fromMe === true || data.isMe === true || data.isSelf === true || String(data.fromUid || '') === '0') return 'outgoing'
 
-    if (messageEl.getAttribute('data-from-me') === 'true' || messageEl.getAttribute('data-is-me') === 'true') return 'outgoing'
-    if (messageEl.getAttribute('data-from-me') === 'false' || messageEl.getAttribute('data-is-me') === 'false') return 'incoming'
+    if (messageAttr(messageEl, 'data-from-me') === 'true' || messageAttr(messageEl, 'data-is-me') === 'true') return 'outgoing'
+    if (messageAttr(messageEl, 'data-from-me') === 'false' || messageAttr(messageEl, 'data-is-me') === 'false') return 'incoming'
 
-    const classes = classText(messageEl).split(/\s+/)
+    const frame = messageFrame(messageEl)
+    const classes = `${classText(messageEl)} ${frame !== messageEl ? classText(frame) : ''}`.split(/\s+/)
     if (classes.some((name) => /(^|[-_])(me|mine|self|sent|send|outgoing|right)($|[-_])/.test(name))) return 'outgoing'
     if (classes.some((name) => /(^|[-_])(other|incoming|left)($|[-_])/.test(name))) return 'incoming'
     return 'unknown'
@@ -98,9 +108,9 @@
     const props = messageProps(messageEl)
     const data = props.data || props.message || {}
     const explicit = messageEl && (
-      messageEl.getAttribute('data-sender-name') ||
-      messageEl.getAttribute('data-author') ||
-      messageEl.getAttribute('aria-label') ||
+      messageAttr(messageEl, 'data-sender-name') ||
+      messageAttr(messageEl, 'data-author') ||
+      messageAttr(messageEl, 'aria-label') ||
       props.senderName ||
       props.displayName ||
       data.senderName ||
@@ -111,6 +121,11 @@
     if (explicit) return normalizeContextText(explicit).slice(0, 40)
 
     const speaker = firstText(messageEl, [
+      '[class*="sender"]',
+      '[class*="author"]',
+      '[class*="from"]',
+      '[class*="name"]'
+    ]) || firstText(messageFrame(messageEl), [
       '[class*="sender"]',
       '[class*="author"]',
       '[class*="from"]',

@@ -120,6 +120,22 @@ describe('local translate context', () => {
     expect(window.ZaDarkTranslateContext.formatContextItem(window.ZaDarkTranslateContext.contextItemFromElement(outgoing))).toBe('[Me] Hi')
   })
 
+  it('uses wrapper message classes and sender names around inner cards', () => {
+    document.body.innerHTML = `
+      <div class="chat-message me">
+        <div class="card"><span-15>My wrapped message.</span-15></div>
+      </div>
+      <div class="chat-message" data-sender-name="Ngoc">
+        <div class="card"><span-15>Wrapped incoming.</span-15></div>
+      </div>
+    `
+
+    const cards = document.querySelectorAll('.card')
+
+    expect(window.ZaDarkTranslateContext.formatContextItem(window.ZaDarkTranslateContext.contextItemFromElement(cards[0]))).toBe('[Me] My wrapped message.')
+    expect(window.ZaDarkTranslateContext.formatContextItem(window.ZaDarkTranslateContext.contextItemFromElement(cards[1]))).toBe('[Ngoc] Wrapped incoming.')
+  })
+
   it('treats Zalo sound cards as voice messages', () => {
     const sound = document.createElement('div')
     sound.className = 'card card--sound'

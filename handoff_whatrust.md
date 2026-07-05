@@ -212,6 +212,8 @@ Current context behavior:
 - Context lines include speaker labels such as `[Me]`, `[Alice]`, or `[Them]`.
 - Zalo-like React props such as `senderName`, `displayName`, `fromMe`, `isMe`,
   `isSelf`, and `fromUid: "0"` are used when available.
+- Wrapper message nodes such as `.chat-message.me` are also used for direction
+  and sender inference when the inner `.card` lacks metadata.
 - The selected message is excluded from context.
 - Own outgoing messages are marked `[Me]`.
 - Images/videos without captions become short placeholders.
@@ -482,7 +484,7 @@ Goal: release confidence.
 
 Recent checks that have passed during this work:
 
-- `npm test`: 45 tests passing.
+- `npm test`: 46 tests passing.
 - `node src/pc/local-translate/backend.js --self-check`: passing.
 - `standard` on touched JS files: passing.
 - `npm run build`: passing, with an existing Node `fs.Stats` deprecation warning.

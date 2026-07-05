@@ -92,7 +92,9 @@ Important repo-specific constraints:
 - During download, Translate settings shows status and a progress bar.
 - Re-clicking translate while downloading returns a non-blocking message instead
   of reopening a blocking dialog.
-- Settings include a model storage path and a delete-model button.
+- A compact ZaDark row opens a dedicated, Zalo-styled translation settings
+  dialog with Local and Cloud sidebar pages. Settings include model selection,
+  storage path, provider credentials, and cleanup actions.
 
 ### Backend Shape
 

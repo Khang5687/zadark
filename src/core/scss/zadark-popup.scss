@@ -769,12 +769,19 @@ body:not(.zadark--use-hotkeys) {
     }
 
     .zadark-settings-link {
-      padding: 7px 10px;
-      border: 1px solid var(--zadark-border-base);
-      border-radius: 5px;
+      height: 32px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: var(--zadark-border-radius-base);
       color: var(--zadark-neutral-base);
-      background: transparent;
+      background: var(--zadark-grey-500);
+      font: inherit;
+      transition: background 120ms ease;
       cursor: pointer;
+
+      &:hover {
+        background: var(--zadark-grey-400);
+      }
     }
 
     .zadark-beta {
@@ -877,18 +884,7 @@ body:not(.zadark--use-hotkeys) {
 
       &.selected,
       &:hover {
-        background: var(--zadark-input-bg);
-      }
-
-      &.selected::before {
-        position: absolute;
-        top: 9px;
-        bottom: 9px;
-        left: 0;
-        width: 3px;
-        border-radius: 2px;
-        background: var(--zadark-primary-base);
-        content: "";
+        background: var(--zadark-grey-500);
       }
     }
   }
@@ -1077,11 +1073,15 @@ body:not(.zadark--use-hotkeys) {
   .zadark-translate-settings__row button {
     min-height: 34px;
     padding: 6px 10px;
-    border: 1px solid var(--zadark-border-base);
-    border-radius: 5px;
+    border: 0;
+    border-radius: 6px;
     color: inherit;
-    background: transparent;
+    background: var(--zadark-grey-500);
     cursor: pointer;
+
+    &:hover:not(:disabled) {
+      background: var(--zadark-grey-400);
+    }
 
     &:disabled {
       opacity: 0.5;
@@ -1094,6 +1094,21 @@ body:not(.zadark--use-hotkeys) {
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 16px;
+  }
+
+  #js-save-cloud-translate {
+    color: #fff;
+    background: var(--zadark-primary-base);
+
+    &:hover:not(:disabled) {
+      background: var(--zadark-primary-dark);
+    }
+  }
+
+  #js-delete-cloud-translate,
+  .zadark-translate-model__delete {
+    color: var(--zadark-neutral-500);
+    background: transparent;
   }
 
   @media (max-width: 720px) {

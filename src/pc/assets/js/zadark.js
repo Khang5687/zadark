@@ -1784,7 +1784,7 @@
               Dịch tin nhắn
               <i class="zadark-icon zadark-icon--question" data-tippy-content='<p>Bạn di chuyển chuột vào đoạn tin nhắn và chọn biểu tượng <i class="zadark-icon zadark-icon--translate" style="position: relative; top: 3px; font-size: 18px;"></i> để dịch tin nhắn.</p><p>Bạn có thể dịch riêng tư trên máy hoặc dùng API đám mây.</p>'></i>
             </label>
-            <button id="js-open-translate-settings" type="button" class="zadark-settings-link">Cài đặt dịch AI</button>
+            <button id="js-open-translate-settings" type="button" class="zadark-settings-link">Cài đặt</button>
           </div>
 
           <div class="font-settings">

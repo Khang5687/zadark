@@ -13,11 +13,15 @@ subagent response is folded into this handoff.
 
 ## Quick Answer: Commit Count
 
-The ZaDark local translation implementation work before this handoff spans 54
-commits, from:
+The ZaDark translation implementation started at:
 
 - `91bd6bc feat(pc): add local translate backend prototype`
-- through `1c55f48 feat(pc): download translation model in background`
+
+The latest model/provider work is split into atomic commits:
+
+- `09baa32 feat(pc): add local translation model manager`
+- `646eac9 feat(pc): add secure cloud translation providers`
+- `c73b170 feat(pc): add translation engine settings`
 
 ## Purpose
 
@@ -29,6 +33,8 @@ ZaDark now has a local desktop translation path:
 - Translation runs locally on the user's machine.
 - The model runtime starts on demand and stops after an idle timeout.
 - Users can see progress and delete model files from settings.
+- TranslateGemma 4B is the default; 12B is an explicit optional download.
+- Users who cannot run a local model can configure a supported cloud API.
 
 The purpose of this document is to help WhatRust implement a similar feature
 without inheriting ZaDark's Electron-specific constraints or current rough edges.
@@ -150,7 +156,15 @@ High-memory Apple Silicon option:
 - Revision: `fdf84c9f6fe14e69d58814f14e7b5b63bb6a1b28`.
 - Size: `7300794112` bytes.
 - SHA-256: `b7aac4b4be7ab0c49b6556c29c4467e74313df7f1e95d9f9676bb2adf0afa528`.
-- ZaDark auto-selects it only with at least 24 GB RAM; other targets retain 4B.
+- ZaDark never auto-selects it. The UI recommends it only when the current
+  platform and RAM meet conservative guidance; the user chooses whether to
+  download and use it.
+
+The same 4B/12B choice is exposed on Intel macOS, Windows x64, and Linux x64
+using platform-compatible llama.cpp artifacts. Current advisory thresholds are
+8/16 GB minimum/recommended RAM for 4B and 16/24 GB for 12B. These checks do not
+block manual selection because available RAM, memory pressure, and real runtime
+performance cannot be inferred reliably from total RAM alone.
 
 Also present as a manifest option:
 
@@ -284,6 +298,31 @@ The setting is enabled by default and can be disabled in Translation settings.
   and idioms. This is intentional: false negatives are safer than invented
   default-on explanations.
 
+### Optional Cloud Translation
+
+Local remains the default. Users may explicitly select OpenAI, Groq, xAI,
+Mistral, OpenRouter, or a custom OpenAI-compatible endpoint. Corti is not
+supported.
+
+- There is no automatic fallback between local and cloud. A local failure must
+  never silently upload a message.
+- The settings UI states that selected message text and bounded recent context
+  are sent to the chosen provider and that charges may apply.
+- Provider, model, and endpoint are persisted by the backend. API keys are
+  encrypted with Electron `safeStorage`, never returned to the renderer, and
+  never stored in `localStorage`.
+- Linux's insecure Electron `basic_text` storage fallback is rejected.
+- Custom endpoints require HTTPS, except loopback HTTP for local development.
+- Cloud errors are bounded and credential-free. Provider configuration can be
+  tested and deleted from settings.
+- Streaming uses the same ZaDark NDJSON event contract as local translation.
+- Context footnotes remain local-only to avoid an undisclosed second paid API
+  request.
+
+WhatRust should use the platform credential store through a mature Rust/Tauri
+integration rather than copying Electron `safeStorage`. Preserve the explicit
+privacy boundary and never expose stored credentials to the WhatsApp webview.
+
 Research verdict for later media features:
 
 - Use separate specialized optional packs, not one large unified multimodal
@@ -391,6 +430,9 @@ Carry these forward:
 - Safe archive extraction.
 - Delete-model support.
 - Hardware-based runtime selection.
+- 4B default with explicit, advisory 12B selection.
+- No silent local-to-cloud fallback.
+- OS-protected cloud credentials and an explicit remote-data disclosure.
 - Private loopback service only if HTTP is needed.
 - Background download with progress in settings.
 - Disk copy based on free space before/after, not percent of total disk.
@@ -570,8 +612,9 @@ Recent checks that have passed during this work:
 - Cache hit was observed on repeat translation.
 - Delete model path was tested and removed model data.
 - A 2026-07-06 non-UI integration check confirmed that a 32 GB Apple Silicon
-  host selects the 12B Metal variant, finds its verified GGUF and bundled 27 MB
-  runtime, cold-starts it, and returns the corrected payment translation.
+  host can explicitly select the 12B Metal variant, find its verified GGUF and
+  bundled 27 MB runtime, cold-start it, and return the corrected payment
+  translation. The product default was subsequently changed back to 4B.
 - Speaker-aware context tests cover group labels, own messages as `[Me]`,
   same-chat memory isolation, selected-message exclusion, and image/voice
   placeholders.

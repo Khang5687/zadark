@@ -518,20 +518,22 @@ describe('local translate backend', () => {
     expect(selected.id).toBe('downloadable-fallback')
   })
 
-  it('does not auto-select a model that needs more memory than the machine has', () => {
+  it('selects the manifest default model instead of the largest compatible model', () => {
     const hardware = backend.detectHardware()
     const selected = backend.selectVariant({
+      defaultModel: 'small',
       variants: [
         {
-          id: 'too-large',
+          id: 'large',
+          model: 'large',
           platform: hardware.platform,
           arch: hardware.arch,
           accelerator: hardware.accelerator,
-          minMemoryGb: hardware.totalMemGb + 1,
           serverCommand: process.execPath
         },
         {
-          id: 'fits',
+          id: 'small',
+          model: 'small',
           platform: hardware.platform,
           arch: hardware.arch,
           accelerator: 'cpu',
@@ -540,7 +542,29 @@ describe('local translate backend', () => {
       ]
     })
 
-    expect(selected.id).toBe('fits')
+    expect(selected.id).toBe('small')
+  })
+
+  it('reports conservative memory guidance without blocking manual selection', () => {
+    const hardware = { platform: 'darwin', arch: 'arm64', accelerator: 'mlx', totalMemGb: 8 }
+    const variant = { platform: 'darwin', arch: 'arm64', model: 'translategemma-12b-it' }
+
+    expect(backend.assessVariant(variant, hardware)).toEqual({
+      level: 'not-recommended',
+      minimumMemoryGb: 16,
+      recommendedMemoryGb: 24
+    })
+  })
+
+  it('offers one 4B and one 12B choice for the current platform', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src/pc/local-translate/model-manifest.json')))
+    const variants = backend.compatibleVariants(manifest)
+
+    expect(variants.map((variant) => variant.model).sort()).toEqual([
+      'translategemma-12b-it',
+      'translategemma-4b-it'
+    ])
+    expect(backend.selectVariant(manifest).model).toBe('translategemma-4b-it')
   })
 
   it('never selects a downloadable runtime for another platform', () => {
@@ -605,6 +629,30 @@ describe('local translate backend', () => {
       expect(backend.variantStatus(active, tempDir).running).toBe(true)
       expect(backend.variantStatus(inactive, tempDir).running).toBe(false)
       expect(backend.variantStatus(active, path.join(tempDir, 'other-model-root')).running).toBe(false)
+    } finally {
+      backend.stopRuntime()
+    }
+  })
+
+  it('stops the active runtime when the selected model changes', () => {
+    const first = {
+      id: 'first-runtime-test',
+      runtime: 'test',
+      runtimeCandidates: [process.execPath],
+      serverArgs: ['-e', 'setTimeout(function () {}, 30000)']
+    }
+    const second = {
+      id: 'second-runtime-test',
+      runtime: 'test',
+      runtimeCandidates: [process.execPath],
+      serverArgs: ['-e', 'setTimeout(function () {}, 30000)']
+    }
+
+    try {
+      backend.startRuntime(first, tempDir)
+      backend.startRuntime(second, tempDir)
+      expect(backend.variantStatus(first, tempDir).running).toBe(false)
+      expect(backend.variantStatus(second, tempDir).running).toBe(true)
     } finally {
       backend.stopRuntime()
     }

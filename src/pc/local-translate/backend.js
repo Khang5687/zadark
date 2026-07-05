@@ -644,25 +644,58 @@ function scoreVariant (variant, hardware) {
   return score
 }
 
+function isCompatibleVariant (variant, hardware) {
+  return (variant.platform === '*' || variant.platform === hardware.platform) &&
+    (variant.arch === '*' || variant.arch === hardware.arch)
+}
+
+function assessVariant (variant, hardware) {
+  const is12b = String(variant.model || '').includes('12b')
+  const minimumMemoryGb = is12b ? 16 : 8
+  const recommendedMemoryGb = is12b ? 24 : 16
+  if (!isCompatibleVariant(variant, hardware)) {
+    return { level: 'unsupported', minimumMemoryGb, recommendedMemoryGb }
+  }
+  if (hardware.totalMemGb < minimumMemoryGb) {
+    return { level: 'not-recommended', minimumMemoryGb, recommendedMemoryGb }
+  }
+  if (is12b && !(hardware.platform === 'darwin' && hardware.arch === 'arm64')) {
+    return { level: 'slower', minimumMemoryGb, recommendedMemoryGb }
+  }
+  return {
+    level: hardware.totalMemGb >= recommendedMemoryGb ? 'recommended' : 'supported',
+    minimumMemoryGb,
+    recommendedMemoryGb
+  }
+}
+
+function compatibleVariants (manifest, hardware = detectHardware()) {
+  const ranked = manifest.variants
+    .filter((variant) => isCompatibleVariant(variant, hardware))
+    .sort((a, b) => scoreVariant(b, hardware) - scoreVariant(a, hardware))
+  const models = []
+  const seen = new Set()
+
+  for (const variant of ranked) {
+    if (seen.has(variant.model)) continue
+    const choices = ranked.filter((candidate) => candidate.model === variant.model)
+    models.push(choices.find((candidate) => runtimeStatus(candidate).available || isRuntimeDownloadable(candidate)) || choices[0])
+    seen.add(variant.model)
+  }
+  return models
+}
+
 function selectVariant (manifest, requestedId) {
+  const hardware = detectHardware()
   if (requestedId) {
     const requested = manifest.variants.find((variant) => variant.id === requestedId)
     if (!requested) throw new Error(`Unknown model variant: ${requestedId}`)
+    if (!isCompatibleVariant(requested, hardware)) throw new Error(`Model variant is not compatible with this device: ${requestedId}`)
     return requested
   }
 
-  const hardware = detectHardware()
-  const ranked = manifest.variants
-    .slice()
-    .sort((a, b) => scoreVariant(b, hardware) - scoreVariant(a, hardware))
-  const compatible = ranked.filter((variant) => {
-    return (variant.platform === '*' || variant.platform === hardware.platform) &&
-      (variant.arch === '*' || variant.arch === hardware.arch) &&
-      (!variant.minMemoryGb || hardware.totalMemGb >= variant.minMemoryGb)
-  })
-  return compatible.find((variant) => runtimeStatus(variant).available || isRuntimeDownloadable(variant)) ||
-    compatible[0] ||
-    ranked[0]
+  const compatible = compatibleVariants(manifest, hardware)
+  return compatible.find((variant) => variant.model === manifest.defaultModel) || compatible[0] || manifest.variants[0]
 }
 
 function storageRoot (storagePath) {
@@ -769,7 +802,8 @@ function variantStatus (variant, storagePath) {
     runtimeMessage: runtime.message,
     idleTimeoutMs: IDLE_TIMEOUT_MS,
     lastUsedAt: state.lastUsedAt,
-    lastError: state.lastError
+    lastError: state.lastError,
+    capability: assessVariant(variant, detectHardware())
   }
 }
 
@@ -1041,7 +1075,8 @@ function runtimeBaseUrl (variant, storagePath) {
 
 function startRuntime (variant, storagePath) {
   clearIdleTimer()
-  if (state.child) return
+  if (state.child && isVariantRunning(variant, storagePath)) return
+  if (state.child) stopRuntime()
 
   const runtime = runtimeStatus(variant)
   if (!runtime.available) throw new Error(runtime.message)
@@ -1196,7 +1231,7 @@ async function generateFootnotes (body) {
   if (!text) throw new Error('Missing text')
 
   const manifest = loadManifest()
-  const variant = state.variant || selectVariant(manifest, body.variantId)
+  const variant = selectVariant(manifest, body.variantId)
   const key = JSON.stringify({ variant: variant.id, target: body.target || 'vi', text })
   const cached = footnoteCache.get(key)
   if (cached) return { success: true, notes: cached, cached: true }
@@ -1518,7 +1553,7 @@ async function streamTranslate (req, res, body) {
   if (!body.target) throw new Error('Missing target')
 
   const manifest = loadManifest()
-  const variant = state.variant || selectVariant(manifest, body.variantId)
+  const variant = selectVariant(manifest, body.variantId)
   const cacheKey = translationCacheKey(variant, body)
   const cached = getCachedTranslation(cacheKey)
   const isMock = process.env.ZADARK_LOCAL_TRANSLATE_MOCK === '1'
@@ -1630,7 +1665,7 @@ async function translate (body) {
   if (!body.target) throw new Error('Missing target')
 
   const manifest = loadManifest()
-  const variant = state.variant || selectVariant(manifest, body.variantId)
+  const variant = selectVariant(manifest, body.variantId)
   const cacheKey = translationCacheKey(variant, body)
 
   if (process.env.ZADARK_LOCAL_TRANSLATE_MOCK === '1') {
@@ -1695,11 +1730,11 @@ async function route (req, res) {
 
     if (req.method === 'GET' && url.pathname === '/v1/local-translate/status') {
       const storagePath = url.searchParams.get('storagePath') || DEFAULT_STORAGE_DIR
-      const variant = state.variant || selectVariant(manifest, url.searchParams.get('variantId'))
+      const variant = selectVariant(manifest, url.searchParams.get('variantId'))
       return json(req, res, 200, {
         hardware: detectHardware(),
         selected: variantStatus(variant, storagePath),
-        variants: manifest.variants.map((variant) => variantStatus(variant, storagePath))
+        variants: compatibleVariants(manifest).map((variant) => variantStatus(variant, storagePath))
       })
     }
 
@@ -1791,8 +1826,11 @@ function selfCheck () {
   const runtimeVariantIds = [
     'macos-arm64-llamacpp-translategemma-12b-q4',
     'macos-arm64-llamacpp-translategemma-4b-q4',
+    'macos-x64-llamacpp-translategemma-12b-q4',
     'macos-x64-llamacpp-translategemma-4b-q4',
+    'windows-x64-llamacpp-translategemma-12b-q4',
     'windows-x64-llamacpp-translategemma-4b-q4',
+    'linux-x64-llamacpp-translategemma-12b-q4',
     'linux-x64-llamacpp-translategemma-4b-q4'
   ]
   runtimeVariantIds.forEach((id) => assert(isRuntimeDownloadable(selectVariant(manifest, id))))
@@ -1829,8 +1867,10 @@ if (require.main === module) {
 }
 
 module.exports = {
+  assessVariant,
   buildTranslationRequest,
   buildFootnotePrompt,
+  compatibleVariants,
   detectHardware,
   getDiskInfo,
   installVariant,

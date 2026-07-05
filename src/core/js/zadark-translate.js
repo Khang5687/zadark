@@ -1,5 +1,6 @@
 (function ($) {
   const ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY = '@ZaDark:LOCAL_TRANSLATE_STORAGE_PATH'
+  const ZADARK_LOCAL_TRANSLATE_VARIANT_KEY = '@ZaDark:LOCAL_TRANSLATE_VARIANT'
   const ZADARK_TRANSLATE_FOOTNOTES_KEY = '@ZaDark:TRANSLATE_FOOTNOTES'
 
   const getTranslateApiURL = () => {
@@ -16,11 +17,17 @@
     return localStorage.getItem(ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY) || ''
   }
 
+  const getLocalTranslateVariant = () => localStorage.getItem(ZADARK_LOCAL_TRANSLATE_VARIANT_KEY) || ''
+
   const localTranslateStoragePayload = () => {
     if (!isLocalTranslate()) return {}
 
     const storagePath = getLocalTranslateStoragePath()
-    return storagePath ? { storagePath } : {}
+    const variantId = getLocalTranslateVariant()
+    return {
+      ...(storagePath ? { storagePath } : {}),
+      ...(variantId ? { variantId } : {})
+    }
   }
 
   const isTranslateFootnotesEnabled = () => {
@@ -251,7 +258,11 @@
 
   const getLocalTranslateStatus = async () => {
     const storagePath = getLocalTranslateStoragePath()
-    const query = storagePath ? `?storagePath=${encodeURIComponent(storagePath)}` : ''
+    const variantId = getLocalTranslateVariant()
+    const params = new URLSearchParams()
+    if (storagePath) params.set('storagePath', storagePath)
+    if (variantId) params.set('variantId', variantId)
+    const query = params.toString() ? `?${params}` : ''
     const res = await fetch(getTranslateApiURL() + '/local-translate/status' + query)
     const json = await res.json()
     if (!res.ok) {
@@ -949,7 +960,11 @@
     createNdjsonParser,
     parseImageIdentity,
     localTranslateNotReadyResult,
+    localTranslateStoragePayload,
     isTranslateFootnotesEnabled,
+    getLocalTranslateStatus,
+    getLocalTranslateVariant,
+    showLocalTranslateSetup,
     rememberContextItems,
     reset: () => contextMemory.clear()
   }

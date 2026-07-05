@@ -218,6 +218,16 @@ describe('local translate context', () => {
     expect(window.ZaDarkTranslateContext.isTranslateFootnotesEnabled()).toBe(false)
   })
 
+  it('sends the explicitly selected local model with translation requests', () => {
+    localStorage.removeItem('@ZaDark:LOCAL_TRANSLATE_VARIANT')
+    expect(window.ZaDarkTranslateContext.localTranslateStoragePayload()).toEqual({})
+
+    localStorage.setItem('@ZaDark:LOCAL_TRANSLATE_VARIANT', 'macos-arm64-llamacpp-translategemma-12b-q4')
+    expect(window.ZaDarkTranslateContext.localTranslateStoragePayload()).toEqual({
+      variantId: 'macos-arm64-llamacpp-translategemma-12b-q4'
+    })
+  })
+
   it('parses fragmented and combined NDJSON stream events', () => {
     const events = []
     const parser = window.ZaDarkTranslateContext.createNdjsonParser((event) => events.push(event))

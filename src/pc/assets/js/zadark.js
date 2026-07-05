@@ -78,6 +78,7 @@
   const ZADARK_TRANSLATE_TARGET_KEY = '@ZaDark:TRANSLATE_TARGET'
   const ZADARK_TRANSLATE_FOOTNOTES_KEY = '@ZaDark:TRANSLATE_FOOTNOTES'
   const ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY = '@ZaDark:LOCAL_TRANSLATE_STORAGE_PATH'
+  const ZADARK_LOCAL_TRANSLATE_VARIANT_KEY = '@ZaDark:LOCAL_TRANSLATE_VARIANT'
   const ZADARK_THREAD_CHAT_BG_KEY = 'THREAD_CHAT_BG' // localforage key
   const getLocalTranslateApiUrl = () => window.ZADARK_LOCAL_TRANSLATE_API_URL || 'http://127.0.0.1:5555/v1'
 
@@ -253,6 +254,12 @@
     },
     getLocalTranslateStoragePath: () => {
       return localStorage.getItem(ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY) || ''
+    },
+    saveLocalTranslateVariant: (variantId) => {
+      return localStorage.setItem(ZADARK_LOCAL_TRANSLATE_VARIANT_KEY, variantId)
+    },
+    getLocalTranslateVariant: () => {
+      return localStorage.getItem(ZADARK_LOCAL_TRANSLATE_VARIANT_KEY) || ''
     },
 
     /**
@@ -1344,11 +1351,12 @@
   const selectTranslateTargetElName = '#js-select-translate-target'
   const switchTranslateFootnotesElName = '#js-switch-translate-footnotes'
   const localTranslateStatusElName = '#js-local-translate-status'
+  const localTranslateModelsElName = '#js-local-translate-models'
   const localTranslateProgressElName = '#js-local-translate-progress'
   const localTranslateSidebarProgressElName = '#js-local-translate-sidebar-progress'
   const localTranslateSidebarProgressFillElName = '#js-local-translate-sidebar-progress-fill'
   const inputLocalTranslateStoragePathElName = '#js-input-local-translate-storage-path'
-  const buttonDeleteLocalTranslateModelElName = '#js-button-delete-local-translate-model'
+  const buttonDeleteLocalTranslateModelElName = '.js-button-delete-local-translate-model'
   const localOcrStatusElName = '#js-local-ocr-status'
   const buttonDeleteLocalOcrElName = '#js-button-delete-local-ocr'
   const inputThreadChatBgElName = '#js-input-thread-chat-bg'
@@ -1458,7 +1466,11 @@
 
   const getLocalTranslateStatus = async () => {
     const storagePath = ZaDarkStorage.getLocalTranslateStoragePath()
-    const query = storagePath ? `?storagePath=${encodeURIComponent(storagePath)}` : ''
+    const variantId = ZaDarkStorage.getLocalTranslateVariant()
+    const params = new URLSearchParams()
+    if (storagePath) params.set('storagePath', storagePath)
+    if (variantId) params.set('variantId', variantId)
+    const query = params.toString() ? `?${params}` : ''
     const res = await fetch(`${getLocalTranslateApiUrl()}/local-translate/status${query}`)
     const json = await res.json()
     if (!res.ok) {
@@ -1483,6 +1495,71 @@
       throw new Error(json.message || 'Không thể xoá model dịch')
     }
     return json
+  }
+
+  const stopLocalTranslateRuntime = async () => {
+    await fetch(`${getLocalTranslateApiUrl()}/local-translate/stop`, { method: 'POST' })
+  }
+
+  const localModelName = (variant) => String(variant.model || '').includes('12b')
+    ? 'TranslateGemma 12B'
+    : 'TranslateGemma 4B'
+
+  const localModelCapability = (variant) => {
+    if (!String(variant.model || '').includes('12b')) return 'Nhẹ, phù hợp cho hầu hết máy tính'
+    const level = variant.capability && variant.capability.level
+    if (level === 'recommended') return 'Khuyến nghị cho máy này'
+    if (level === 'supported') return 'Có thể chạy trên máy này'
+    if (level === 'slower') return 'Có thể chạy nhưng dự kiến chậm hơn'
+    return 'Không khuyến nghị cho máy này'
+  }
+
+  const renderLocalTranslateModels = (status) => {
+    const $models = $(localTranslateModelsElName).empty()
+    ;(status.variants || []).forEach((variant) => {
+      const selected = variant.id === status.selected.id
+      const is12b = String(variant.model || '').includes('12b')
+      const $row = $('<div>')
+        .addClass('zadark-translate-model')
+        .toggleClass('zadark-translate-model--selected', selected)
+      const $copy = $('<div>').addClass('zadark-translate-model__copy')
+      const $title = $('<div>').addClass('zadark-translate-model__title').text(localModelName(variant))
+      $title.append($('<span>')
+        .addClass('zadark-translate-model__badge')
+        .text(is12b ? 'Chất lượng cao' : 'Mặc định'))
+      const $meta = $('<div>')
+        .addClass('zadark-translate-model__meta')
+        .text(`${formatLocalTranslateBytes(variant.downloadEstimatedBytes || variant.estimatedBytes)} · ${localModelCapability(variant)}`)
+      $copy.append($title, $meta)
+
+      const $actions = $('<div>').addClass('zadark-translate-model__actions')
+      const $primary = $('<button>')
+        .attr('type', 'button')
+        .addClass('zadark-translate-model__button')
+        .attr('data-variant-id', variant.id)
+
+      if (variant.installing) {
+        $primary.prop('disabled', true).text(`${variant.installProgress ? variant.installProgress.percent || 0 : 0}%`)
+      } else if (selected && variant.installed) {
+        $primary.prop('disabled', true).text('Đang dùng')
+      } else if (variant.installed) {
+        $primary.attr('data-action', 'select').text('Sử dụng')
+      } else {
+        $primary.attr('data-action', 'install').text('Tải xuống')
+      }
+      $actions.append($primary)
+
+      if (variant.installed && !variant.installing) {
+        $actions.append($('<button>')
+          .attr({ type: 'button', title: `Xoá ${localModelName(variant)}`, 'aria-label': `Xoá ${localModelName(variant)}` })
+          .addClass('zadark-translate-model__delete js-button-delete-local-translate-model')
+          .attr('data-variant-id', variant.id)
+          .text('Xoá'))
+      }
+
+      $row.append($copy, $actions)
+      $models.append($row)
+    })
   }
 
   const getLocalOcrStatus = async () => {
@@ -1650,9 +1727,9 @@
             <label id="js-local-translate-status" class="font-settings__label font-settings__label--muted" style="flex: 1;">
               Model dịch: đang kiểm tra...
             </label>
-
-            <button id="js-button-delete-local-translate-model" class="btn-del" disabled>Xoá model</button>
           </div>
+
+          <div id="js-local-translate-models" class="zadark-translate-models" aria-live="polite"></div>
 
           <div class="font-settings font-settings--compact">
             <progress id="js-local-translate-progress" class="zadark-local-translate-progress" max="100" value="0" hidden></progress>
@@ -2187,7 +2264,6 @@
   const loadLocalTranslateStatus = async () => {
     const $status = $(localTranslateStatusElName)
     const $progress = $(localTranslateProgressElName)
-    const $button = $(buttonDeleteLocalTranslateModelElName)
     const $pathInput = $(inputLocalTranslateStoragePathElName)
     const $sidebarProgress = $(localTranslateSidebarProgressElName)
     const $sidebarProgressFill = $(localTranslateSidebarProgressFillElName)
@@ -2199,8 +2275,7 @@
       const usedText = formatLocalTranslateBytes(selected.usedBytes || selected.estimatedBytes)
 
       $pathInput.attr('title', selected.storagePath)
-      $button.data('variant-id', selected.id)
-      $button.prop('disabled', !selected.installed || selected.installing)
+      renderLocalTranslateModels(status)
       $progress.prop('hidden', true).val(0)
       $sidebarProgress.prop('hidden', true).attr('aria-valuenow', 0)
       $sidebarProgressFill.css('width', '0%')
@@ -2234,7 +2309,9 @@
       $progress.prop('hidden', true).val(0)
       $sidebarProgress.prop('hidden', true).attr('aria-valuenow', 0)
       $sidebarProgressFill.css('width', '0%')
-      $button.prop('disabled', true)
+      $(localTranslateModelsElName).empty().append(
+        $('<div>').addClass('zadark-translate-model__error').text(error.message)
+      )
     }
 
     const $ocrStatus = $(localOcrStatusElName)
@@ -2272,7 +2349,7 @@
 
   const handleDeleteLocalTranslateModel = async function () {
     const $button = $(this)
-    const variantId = $button.data('variant-id')
+    const variantId = $button.attr('data-variant-id')
     if (!variantId) return
 
     $button.prop('disabled', true).text('Đang xoá...')
@@ -2287,7 +2364,28 @@
       })
       $button.prop('disabled', false)
     } finally {
-      $button.text('Xoá model')
+      $button.text('Xoá')
+    }
+  }
+
+  const handleLocalTranslateModelAction = async function () {
+    const $button = $(this)
+    const variantId = $button.attr('data-variant-id')
+    const action = $button.attr('data-action')
+    if (!variantId || !action) return
+
+    $button.prop('disabled', true)
+    try {
+      ZaDarkStorage.saveLocalTranslateVariant(variantId)
+      await stopLocalTranslateRuntime()
+      if (action === 'install') {
+        const status = await getLocalTranslateStatus()
+        await window.ZaDarkTranslateContext.showLocalTranslateSetup(status)
+      }
+      await loadLocalTranslateStatus()
+    } catch (error) {
+      ZaDarkUtils.showToast(error.message, { className: 'toastify--error', duration: 3000 })
+      $button.prop('disabled', false)
     }
   }
 
@@ -2442,7 +2540,8 @@
       if (isEnter) this.blur()
     })
 
-    $(buttonDeleteLocalTranslateModelElName).on('click', handleDeleteLocalTranslateModel)
+    $(localTranslateModelsElName).on('click', '[data-action="install"],[data-action="select"]', handleLocalTranslateModelAction)
+    $(localTranslateModelsElName).on('click', buttonDeleteLocalTranslateModelElName, handleDeleteLocalTranslateModel)
     $(buttonDeleteLocalOcrElName).on('click', handleDeleteLocalOcr)
 
     $(inputThreadChatBgElName).on('click', function (e) {

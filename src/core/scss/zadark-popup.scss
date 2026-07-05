@@ -835,6 +835,10 @@ body:not(.zadark--use-hotkeys) {
     display: none;
   }
 
+  [hidden] {
+    display: none !important;
+  }
+
   .zadark-translate-settings__window {
     width: min(980px, 94vw);
     height: min(720px, 90vh);
@@ -858,6 +862,7 @@ body:not(.zadark--use-hotkeys) {
     }
 
     button {
+      position: relative;
       width: 100%;
       display: block;
       margin-bottom: 6px;
@@ -874,13 +879,40 @@ body:not(.zadark--use-hotkeys) {
       &:hover {
         background: var(--zadark-input-bg);
       }
+
+      &.selected::before {
+        position: absolute;
+        top: 9px;
+        bottom: 9px;
+        left: 0;
+        width: 3px;
+        border-radius: 2px;
+        background: var(--zadark-primary-base);
+        content: "";
+      }
     }
   }
 
   .zadark-translate-settings__main {
     position: relative;
+    display: block;
     overflow-y: auto;
     padding: 48px 36px;
+  }
+
+  .zadark-translate-settings__header {
+    margin-bottom: 28px;
+
+    h2 {
+      margin: 0 0 6px;
+      font-size: 1.5rem;
+    }
+
+    p {
+      margin: 0;
+      color: var(--zadark-neutral-500);
+      line-height: 1.45;
+    }
   }
 
   .zadark-translate-settings__close {
@@ -917,11 +949,49 @@ body:not(.zadark--use-hotkeys) {
     border-bottom: 1px solid var(--zadark-border-light);
   }
 
-  #js-switch-translate-footnotes {
+  .zadark-toggle {
     justify-self: end;
-    width: 20px;
-    height: 20px;
-    accent-color: var(--zadark-primary-base);
+    position: relative;
+    width: 42px;
+    height: 24px;
+
+    input {
+      position: absolute;
+      opacity: 0;
+    }
+
+    span {
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      background: var(--zadark-neutral-700);
+      cursor: pointer;
+
+      &::after {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--zadark-switch-slider);
+        content: "";
+        transition: transform 120ms ease;
+      }
+    }
+
+    input:checked + span {
+      background: var(--zadark-primary-base);
+
+      &::after {
+        transform: translateX(18px);
+      }
+    }
+
+    input:focus-visible + span {
+      outline: 2px solid var(--zadark-primary-base);
+      outline-offset: 2px;
+    }
   }
 
   .zadark-input,
@@ -973,6 +1043,10 @@ body:not(.zadark--use-hotkeys) {
       align-items: center;
       gap: 8px;
       font-weight: var(--zadark-font-semibold);
+    }
+
+    &__copy {
+      min-width: 0;
     }
 
     &__badge {

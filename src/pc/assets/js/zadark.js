@@ -1630,8 +1630,12 @@
     $(translateEngineElName).removeClass('selected').filter(`[data-translate-engine="${cloud ? 'cloud' : 'local'}"]`).addClass('selected')
     $(localTranslateSettingsElName).prop('hidden', cloud)
     $(cloudTranslateSettingsElName).prop('hidden', !cloud)
-    $(translateFootnotesSettingElName).toggleClass('zadark-switch--disabled', cloud)
+    $(translateFootnotesSettingElName).prop('hidden', cloud)
     $(switchTranslateFootnotesElName).prop('disabled', cloud)
+    $('#js-translate-settings-heading').text(cloud ? 'API đám mây' : 'Dịch trên máy')
+    $('#js-translate-settings-description').text(cloud
+      ? 'Dùng API khi máy không phù hợp để chạy model cục bộ.'
+      : 'Riêng tư và miễn phí. Tin nhắn được xử lý trên máy tính này.')
   }
 
   const getLocalOcrStatus = async () => {
@@ -2012,16 +2016,22 @@
         </aside>
         <main class="zadark-translate-settings__main">
           <button id="js-close-translate-settings" type="button" class="zadark-translate-settings__close" aria-label="Đóng">×</button>
+          <header class="zadark-translate-settings__header">
+            <h2 id="js-translate-settings-heading">Dịch trên máy</h2>
+            <p id="js-translate-settings-description"></p>
+          </header>
 
           <section class="zadark-translate-settings__section">
-            <h3>Tuỳ chọn dịch</h3>
             <label class="zadark-translate-settings__row">
               <span>Ngôn ngữ đích</span>
               <select id="js-select-translate-target" class="zadark-select"></select>
             </label>
             <div id="js-translate-footnotes-setting" class="zadark-translate-settings__row">
               <span>Ghi chú ngữ cảnh do AI tạo</span>
-              <input type="checkbox" id="js-switch-translate-footnotes">
+              <label class="zadark-toggle">
+                <input type="checkbox" id="js-switch-translate-footnotes">
+                <span></span>
+              </label>
             </div>
           </section>
 
@@ -2047,7 +2057,6 @@
 
           <div id="js-cloud-translate-settings" hidden>
             <section class="zadark-translate-settings__section zadark-cloud-translate">
-              <h3>Nhà cung cấp API</h3>
               <p class="zadark-cloud-translate__notice">Tin nhắn và ngữ cảnh gần đây sẽ được gửi đến nhà cung cấp bạn chọn. Nhà cung cấp có thể tính phí.</p>
               <label class="zadark-cloud-translate__field"><span>Nhà cung cấp</span><select id="js-cloud-translate-provider" class="zadark-select"></select></label>
               <label class="zadark-cloud-translate__field"><span>Model</span><input id="js-cloud-translate-model" class="zadark-input" autocomplete="off"></label>

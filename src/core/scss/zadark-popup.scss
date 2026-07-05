@@ -768,157 +768,13 @@ body:not(.zadark--use-hotkeys) {
       width: 168px;
     }
 
-    .zadark-local-translate-progress {
-      width: 100%;
-      height: 6px;
-    }
-
-    .zadark-translate-engine {
-      width: 100%;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0;
-      margin: 4px 0 8px;
-      padding: 3px;
+    .zadark-settings-link {
+      padding: 7px 10px;
       border: 1px solid var(--zadark-border-base);
-      border-radius: 6px;
-
-      label {
-        padding: 6px 8px;
-        border-radius: 4px;
-        text-align: center;
-        cursor: pointer;
-      }
-
-      input {
-        margin-right: 4px;
-      }
-    }
-
-    .zadark-cloud-translate {
-      width: 100%;
-      margin: 4px 0 8px;
-
-      &__notice,
-      &__hint,
-      &__status {
-        margin: 6px 0;
-        color: var(--zadark-neutral-500);
-        font-size: 0.75rem;
-        line-height: 1.4;
-      }
-
-      &__field {
-        display: grid;
-        grid-template-columns: 110px minmax(0, 1fr);
-        align-items: center;
-        gap: 8px;
-        margin-top: 8px;
-
-        .zadark-input,
-        .zadark-select {
-          width: 100%;
-        }
-      }
-
-      &__actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 10px;
-
-        button {
-          min-height: 30px;
-          padding: 4px 9px;
-          border: 1px solid var(--zadark-border-base);
-          border-radius: 5px;
-          color: var(--zadark-neutral-base);
-          background: transparent;
-          cursor: pointer;
-
-          &:disabled {
-            color: var(--zadark-neutral-500);
-            cursor: default;
-          }
-        }
-      }
-    }
-
-    .zadark-translate-models {
-      width: 100%;
-      display: grid;
-      gap: 6px;
-      margin: 4px 0 8px;
-    }
-
-    .zadark-translate-model {
-      min-height: 58px;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 10px;
-      border: 1px solid var(--zadark-border-base);
-      border-radius: 6px;
-
-      &--selected {
-        border-color: var(--zadark-primary-base);
-      }
-
-      &__copy {
-        min-width: 0;
-      }
-
-      &__title {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        color: var(--zadark-neutral-base);
-        font-weight: var(--zadark-font-semibold);
-      }
-
-      &__badge {
-        padding: 1px 5px;
-        border-radius: 4px;
-        color: var(--zadark-neutral-500);
-        background: var(--zadark-neutral-900);
-        font-size: 0.6875rem;
-        font-weight: var(--zadark-font-normal);
-      }
-
-      &__meta,
-      &__error {
-        margin-top: 3px;
-        color: var(--zadark-neutral-500);
-        font-size: 0.75rem;
-        line-height: 1.35;
-      }
-
-      &__actions {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-
-      &__button,
-      &__delete {
-        min-height: 28px;
-        padding: 4px 8px;
-        border: 1px solid var(--zadark-border-base);
-        border-radius: 5px;
-        color: var(--zadark-neutral-base);
-        background: transparent;
-        cursor: pointer;
-
-        &:disabled {
-          color: var(--zadark-neutral-500);
-          cursor: default;
-        }
-      }
-
-      &__delete {
-        color: var(--zadark-danger-base, #d93025);
-      }
+      border-radius: 5px;
+      color: var(--zadark-neutral-base);
+      background: transparent;
+      cursor: pointer;
     }
 
     .zadark-beta {
@@ -961,6 +817,225 @@ body:not(.zadark--use-hotkeys) {
     box-shadow: 0 2px 8px 0 var(--zadark-btn-floating-shadow);
     transform: translateX(-50%);
     cursor: pointer;
+  }
+}
+
+#zadark-translate-settings {
+  position: fixed;
+  z-index: 1000000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--zadark-neutral-base);
+  background: rgba(0, 0, 0, 0.62);
+  font-family: var(--zadark-popup-font-family);
+
+  &[hidden] {
+    display: none;
+  }
+
+  .zadark-translate-settings__window {
+    width: min(980px, 94vw);
+    height: min(720px, 90vh);
+    display: grid;
+    grid-template-columns: 250px minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid var(--zadark-border-base);
+    border-radius: 8px;
+    background: var(--zadark-white-base);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  }
+
+  .zadark-translate-settings__sidebar {
+    padding: 24px 14px;
+    border-right: 1px solid var(--zadark-border-base);
+    background: var(--zadark-grey-700);
+
+    h2 {
+      margin: 0 10px 24px;
+      font-size: 1.5rem;
+    }
+
+    button {
+      width: 100%;
+      display: block;
+      margin-bottom: 6px;
+      padding: 12px 14px;
+      border: 0;
+      border-radius: 6px;
+      color: inherit;
+      background: transparent;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+
+      &.selected,
+      &:hover {
+        background: var(--zadark-input-bg);
+      }
+    }
+  }
+
+  .zadark-translate-settings__main {
+    position: relative;
+    overflow-y: auto;
+    padding: 48px 36px;
+  }
+
+  .zadark-translate-settings__close {
+    position: absolute;
+    top: 14px;
+    right: 18px;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    color: inherit;
+    background: transparent;
+    font-size: 2rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .zadark-translate-settings__section {
+    margin-bottom: 28px;
+
+    h3 {
+      margin: 0 0 12px;
+      font-size: 1.2rem;
+    }
+  }
+
+  .zadark-translate-settings__row,
+  .zadark-cloud-translate__field {
+    min-height: 56px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 45%);
+    align-items: center;
+    gap: 16px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--zadark-border-light);
+  }
+
+  #js-switch-translate-footnotes {
+    justify-self: end;
+    width: 20px;
+    height: 20px;
+    accent-color: var(--zadark-primary-base);
+  }
+
+  .zadark-input,
+  .zadark-select {
+    width: 100%;
+    height: 38px;
+    padding: 0 12px;
+    border: 1px solid var(--zadark-border-base);
+    border-radius: 6px;
+    color: inherit;
+    background: var(--zadark-input-bg);
+    font: inherit;
+  }
+
+  .zadark-translate-settings__status,
+  .zadark-cloud-translate__notice,
+  .zadark-cloud-translate__status {
+    margin: 0 0 10px;
+    color: var(--zadark-neutral-500);
+    line-height: 1.45;
+  }
+
+  .zadark-local-translate-progress {
+    width: 100%;
+    height: 6px;
+  }
+
+  .zadark-translate-models {
+    display: grid;
+    gap: 8px;
+  }
+
+  .zadark-translate-model {
+    min-height: 72px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--zadark-border-base);
+    border-radius: 6px;
+
+    &--selected {
+      border-color: var(--zadark-primary-base);
+    }
+
+    &__title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: var(--zadark-font-semibold);
+    }
+
+    &__badge {
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--zadark-neutral-500);
+      background: var(--zadark-input-bg);
+      font-size: 0.75rem;
+      font-weight: var(--zadark-font-regular);
+    }
+
+    &__meta,
+    &__error {
+      margin-top: 5px;
+      color: var(--zadark-neutral-500);
+      font-size: 0.82rem;
+    }
+
+    &__actions {
+      display: flex;
+      gap: 6px;
+    }
+  }
+
+  .zadark-translate-model__button,
+  .zadark-translate-model__delete,
+  .zadark-cloud-translate__actions button,
+  .zadark-translate-settings__row button {
+    min-height: 34px;
+    padding: 6px 10px;
+    border: 1px solid var(--zadark-border-base);
+    border-radius: 5px;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+  }
+
+  .zadark-cloud-translate__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  @media (max-width: 720px) {
+    .zadark-translate-settings__window {
+      grid-template-columns: 180px minmax(0, 1fr);
+    }
+
+    .zadark-translate-settings__main {
+      padding: 44px 20px;
+    }
+
+    .zadark-translate-settings__row,
+    .zadark-cloud-translate__field {
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
   }
 }
 

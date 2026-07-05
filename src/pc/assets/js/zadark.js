@@ -1358,7 +1358,7 @@
   const selectTranslateTargetElName = '#js-select-translate-target'
   const switchTranslateFootnotesElName = '#js-switch-translate-footnotes'
   const translateFootnotesSettingElName = '#js-translate-footnotes-setting'
-  const translateEngineElName = 'input[name="zadark-translate-engine"]'
+  const translateEngineElName = '[data-translate-engine]'
   const localTranslateSettingsElName = '#js-local-translate-settings'
   const cloudTranslateSettingsElName = '#js-cloud-translate-settings'
   const cloudProviderElName = '#js-cloud-translate-provider'
@@ -1627,7 +1627,7 @@
 
   const setTranslateEngineUI = (engine) => {
     const cloud = engine === 'cloud'
-    $(translateEngineElName).filter(`[value="${cloud ? 'cloud' : 'local'}"]`).prop('checked', true)
+    $(translateEngineElName).removeClass('selected').filter(`[data-translate-engine="${cloud ? 'cloud' : 'local'}"]`).addClass('selected')
     $(localTranslateSettingsElName).prop('hidden', cloud)
     $(cloudTranslateSettingsElName).prop('hidden', !cloud)
     $(translateFootnotesSettingElName).toggleClass('zadark-switch--disabled', cloud)
@@ -1780,81 +1780,7 @@
               Dịch tin nhắn
               <i class="zadark-icon zadark-icon--question" data-tippy-content='<p>Bạn di chuyển chuột vào đoạn tin nhắn và chọn biểu tượng <i class="zadark-icon zadark-icon--translate" style="position: relative; top: 3px; font-size: 18px;"></i> để dịch tin nhắn.</p><p>Bạn có thể dịch riêng tư trên máy hoặc dùng API đám mây.</p>'></i>
             </label>
-
-            <select id="js-select-translate-target" class="zadark-select"></select>
-          </div>
-
-          <fieldset class="zadark-translate-engine" aria-label="Cách xử lý bản dịch">
-            <label><input type="radio" name="zadark-translate-engine" value="local"> Trên máy</label>
-            <label><input type="radio" name="zadark-translate-engine" value="cloud"> API đám mây</label>
-          </fieldset>
-
-          <div id="js-translate-footnotes-setting" class="zadark-switch">
-            <label class="zadark-switch__label zadark-switch__label--helper" for="js-switch-translate-footnotes">
-              Ghi chú ngữ cảnh do AI tạo
-              <i class="zadark-icon zadark-icon--question" data-tippy-content="Giải thích ngắn các thành ngữ, chữ viết tắt và tham chiếu văn hoá bên dưới bản dịch."></i>
-            </label>
-            <label class="zadark-switch__checkbox">
-              <input class="zadark-switch__input" type="checkbox" id="js-switch-translate-footnotes">
-              <span class="zadark-switch__slider"></span>
-            </label>
-          </div>
-
-          <div id="js-local-translate-settings">
-            <div class="font-settings font-settings--compact">
-              <label id="js-local-translate-status" class="font-settings__label font-settings__label--muted" style="flex: 1;">
-                Model dịch: đang kiểm tra...
-              </label>
-            </div>
-
-            <div id="js-local-translate-models" class="zadark-translate-models" aria-live="polite"></div>
-
-            <div class="font-settings font-settings--compact">
-              <progress id="js-local-translate-progress" class="zadark-local-translate-progress" max="100" value="0" hidden></progress>
-            </div>
-
-            <div class="font-settings font-settings--compact">
-              <label id="js-local-ocr-status" class="font-settings__label font-settings__label--muted" style="flex: 1;">
-                OCR ảnh: đang kiểm tra...
-              </label>
-
-              <button id="js-button-delete-local-ocr" class="btn-del" disabled>Xoá OCR</button>
-            </div>
-
-            <div class="font-settings font-settings--compact">
-              <label class="font-settings__label font-settings__label--muted" style="flex: 1;">
-                Thư mục model
-              </label>
-
-              <input id="js-input-local-translate-storage-path" class="zadark-input" placeholder="Mặc định">
-            </div>
-          </div>
-
-          <div id="js-cloud-translate-settings" class="zadark-cloud-translate" hidden>
-            <p class="zadark-cloud-translate__notice">Tin nhắn và ngữ cảnh gần đây sẽ được gửi đến nhà cung cấp bạn chọn. Nhà cung cấp có thể tính phí.</p>
-            <label class="zadark-cloud-translate__field">
-              <span>Nhà cung cấp</span>
-              <select id="js-cloud-translate-provider" class="zadark-select"></select>
-            </label>
-            <label class="zadark-cloud-translate__field">
-              <span>Model</span>
-              <input id="js-cloud-translate-model" class="zadark-input" autocomplete="off">
-            </label>
-            <label id="js-cloud-translate-base-url-row" class="zadark-cloud-translate__field" hidden>
-              <span>Địa chỉ API</span>
-              <input id="js-cloud-translate-base-url" class="zadark-input" type="url" placeholder="https://example.com/v1" autocomplete="off">
-            </label>
-            <label class="zadark-cloud-translate__field">
-              <span>API key</span>
-              <input id="js-cloud-translate-api-key" class="zadark-input" type="password" autocomplete="new-password">
-            </label>
-            <div class="zadark-cloud-translate__actions">
-              <button id="js-save-cloud-translate" type="button">Lưu</button>
-              <button id="js-test-cloud-translate" type="button">Kiểm tra kết nối</button>
-              <button id="js-delete-cloud-translate" type="button" class="btn-del">Xoá thông tin</button>
-            </div>
-            <div id="js-cloud-translate-status" class="zadark-cloud-translate__status" aria-live="polite"></div>
-            <p class="zadark-cloud-translate__hint">Ghi chú ngữ cảnh chỉ khả dụng khi dịch trên máy.</p>
+            <button id="js-open-translate-settings" type="button" class="zadark-settings-link">Cài đặt dịch AI</button>
           </div>
 
           <div class="font-settings">
@@ -2076,6 +2002,70 @@
     </div>
   `
 
+  const translateSettingsDialogHTML = `
+    <div id="zadark-translate-settings" role="dialog" aria-modal="true" aria-labelledby="zadark-translate-settings-title" hidden>
+      <div class="zadark-translate-settings__window">
+        <aside class="zadark-translate-settings__sidebar">
+          <h2 id="zadark-translate-settings-title">Dịch AI</h2>
+          <button type="button" data-translate-engine="local">Trên máy</button>
+          <button type="button" data-translate-engine="cloud">API đám mây</button>
+        </aside>
+        <main class="zadark-translate-settings__main">
+          <button id="js-close-translate-settings" type="button" class="zadark-translate-settings__close" aria-label="Đóng">×</button>
+
+          <section class="zadark-translate-settings__section">
+            <h3>Tuỳ chọn dịch</h3>
+            <label class="zadark-translate-settings__row">
+              <span>Ngôn ngữ đích</span>
+              <select id="js-select-translate-target" class="zadark-select"></select>
+            </label>
+            <div id="js-translate-footnotes-setting" class="zadark-translate-settings__row">
+              <span>Ghi chú ngữ cảnh do AI tạo</span>
+              <input type="checkbox" id="js-switch-translate-footnotes">
+            </div>
+          </section>
+
+          <div id="js-local-translate-settings">
+            <section class="zadark-translate-settings__section">
+              <h3>Model trên máy</h3>
+              <p id="js-local-translate-status" class="zadark-translate-settings__status">Đang kiểm tra...</p>
+              <div id="js-local-translate-models" class="zadark-translate-models" aria-live="polite"></div>
+              <progress id="js-local-translate-progress" class="zadark-local-translate-progress" max="100" value="0" hidden></progress>
+            </section>
+            <section class="zadark-translate-settings__section">
+              <h3>Dữ liệu bổ sung</h3>
+              <div class="zadark-translate-settings__row">
+                <span id="js-local-ocr-status">OCR ảnh: đang kiểm tra...</span>
+                <button id="js-button-delete-local-ocr" type="button" class="btn-del" disabled>Xoá OCR</button>
+              </div>
+              <label class="zadark-translate-settings__row">
+                <span>Thư mục model</span>
+                <input id="js-input-local-translate-storage-path" class="zadark-input" placeholder="Mặc định">
+              </label>
+            </section>
+          </div>
+
+          <div id="js-cloud-translate-settings" hidden>
+            <section class="zadark-translate-settings__section zadark-cloud-translate">
+              <h3>Nhà cung cấp API</h3>
+              <p class="zadark-cloud-translate__notice">Tin nhắn và ngữ cảnh gần đây sẽ được gửi đến nhà cung cấp bạn chọn. Nhà cung cấp có thể tính phí.</p>
+              <label class="zadark-cloud-translate__field"><span>Nhà cung cấp</span><select id="js-cloud-translate-provider" class="zadark-select"></select></label>
+              <label class="zadark-cloud-translate__field"><span>Model</span><input id="js-cloud-translate-model" class="zadark-input" autocomplete="off"></label>
+              <label id="js-cloud-translate-base-url-row" class="zadark-cloud-translate__field" hidden><span>Địa chỉ API</span><input id="js-cloud-translate-base-url" class="zadark-input" type="url" placeholder="https://example.com/v1" autocomplete="off"></label>
+              <label class="zadark-cloud-translate__field"><span>API key</span><input id="js-cloud-translate-api-key" class="zadark-input" type="password" autocomplete="new-password"></label>
+              <div class="zadark-cloud-translate__actions">
+                <button id="js-save-cloud-translate" type="button">Lưu</button>
+                <button id="js-test-cloud-translate" type="button">Kiểm tra kết nối</button>
+                <button id="js-delete-cloud-translate" type="button" class="btn-del">Xoá thông tin</button>
+              </div>
+              <div id="js-cloud-translate-status" class="zadark-cloud-translate__status" aria-live="polite"></div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+  `
+
   const zadarkPopupHTML = `
     <div id="js-zadark-popup" class="zadark-popper">
       <div id="zadark-popup">
@@ -2090,6 +2080,7 @@
         </div>
       </div>
     </div>
+    ${translateSettingsDialogHTML}
   `
 
   const loadHotkeys = (isEnabled = true) => {
@@ -2640,8 +2631,8 @@
       ZaDarkStorage.saveTranslateFootnotes($(this).is(':checked'))
     })
 
-    $(translateEngineElName).on('change', function () {
-      const engine = $(this).val()
+    $(translateEngineElName).on('click', function () {
+      const engine = $(this).attr('data-translate-engine')
       ZaDarkStorage.saveTranslateEngine(engine)
       setTranslateEngineUI(engine)
       if (engine === 'cloud') loadCloudTranslateConfig()
@@ -2812,6 +2803,26 @@
 
     const popupEl = document.querySelector('#js-zadark-popup')
     const buttonEl = document.getElementById('div_Main_TabZaDark')
+    const translateSettingsEl = document.getElementById('zadark-translate-settings')
+    const closeTranslateSettings = () => {
+      translateSettingsEl.hidden = true
+      stopLocalTranslateStatusPolling()
+    }
+
+    $('#js-open-translate-settings').on('click', () => {
+      setZaDarkPopupVisible(buttonEl, popupEl, false)
+      translateSettingsEl.hidden = false
+      document.getElementById('js-close-translate-settings').focus()
+      loadLocalTranslateStatus()
+      loadCloudTranslateConfig()
+    })
+    $('#js-close-translate-settings').on('click', closeTranslateSettings)
+    $(translateSettingsEl).on('click', function (event) {
+      if (event.target === this) closeTranslateSettings()
+    })
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !translateSettingsEl.hidden) closeTranslateSettings()
+    })
 
     buttonEl.addEventListener('click', handleOpenZaDarkPopup(buttonEl, popupEl))
 

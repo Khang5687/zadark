@@ -176,6 +176,10 @@
 
     color: var(--text-errors);
     font-size: 12px;
+
+    &--status {
+      color: var(--zadark-neutral-500);
+    }
   }
 
   .zadark-local-translate-dialog__actions {

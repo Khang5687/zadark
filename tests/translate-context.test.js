@@ -162,4 +162,17 @@ describe('local translate context', () => {
 
     expect(window.ZaDarkTranslateContext.formatContextItem(window.ZaDarkTranslateContext.contextItemFromElement(sound))).toBe('[Lan] sent a voice message')
   })
+
+  it('treats an active model download as pending instead of an error', () => {
+    expect(window.ZaDarkTranslateContext.localTranslateNotReadyResult('installing', 'Đang tải')).toEqual({
+      success: false,
+      pending: true,
+      message: 'Đang tải'
+    })
+    expect(window.ZaDarkTranslateContext.localTranslateNotReadyResult(false, 'Chưa tải')).toEqual({
+      success: false,
+      pending: false,
+      message: 'Chưa tải'
+    })
+  })
 })

@@ -29,6 +29,12 @@
 
   let localTranslateNotReadyMessage = 'Bạn chưa tải model AI'
 
+  const localTranslateNotReadyResult = (readiness, message) => ({
+    success: false,
+    pending: readiness === 'installing',
+    message
+  })
+
   const normalizeTranslateText = (text) => String(text || '').replace(/(?:\r\n|\r|\n)/g, '<br>').trim()
 
   const normalizeContextText = (text) => String(text || '').replace(/\s+/g, ' ').trim()
@@ -364,12 +370,15 @@
         if (!acceptedGemmaTerms) return
         $button.prop('disabled', true).text('Đang tải...')
         $dialog.find('[data-action="cancel"]').prop('disabled', true)
-        $error.text('')
+        $error.removeClass('zadark-local-translate-dialog__error--status').text('')
         localTranslateNotReadyMessage = 'ZaDark đang tải model dịch trong nền. Bạn có thể tiếp tục dùng Zalo.'
         installLocalTranslateModel(selected.id, acceptedGemmaTerms).catch(() => {})
+        document.dispatchEvent(new CustomEvent('@ZaDark:LOCAL_TRANSLATE_INSTALLING'))
         $button.text('Đang tải trong nền...')
-        $error.text('ZaDark đang tải model trong nền. Bạn có thể tiếp tục dùng Zalo.')
-        setTimeout(() => finish(false), 1200)
+        $error
+          .addClass('zadark-local-translate-dialog__error--status')
+          .text('ZaDark đang tải model trong nền. Bạn có thể tiếp tục dùng Zalo.')
+        setTimeout(() => finish('installing'), 1200)
       })
 
       $('body').append($dialog)
@@ -384,7 +393,7 @@
     if (status.selected && status.selected.installing) {
       const progress = status.selected.installProgress || {}
       localTranslateNotReadyMessage = `ZaDark đang tải model dịch trong nền${progress.percent ? `: ${progress.percent}%` : ''}. Bạn có thể tiếp tục dùng Zalo.`
-      return false
+      return 'installing'
     }
 
     if (status.selected && status.selected.installed) {
@@ -401,12 +410,9 @@
 
   const translate = async (text, target, context = []) => {
     try {
-      const isReady = await ensureLocalTranslateReady()
-      if (!isReady) {
-        return {
-          success: false,
-          message: localTranslateNotReadyMessage
-        }
+      const readiness = await ensureLocalTranslateReady()
+      if (readiness !== true) {
+        return localTranslateNotReadyResult(readiness, localTranslateNotReadyMessage)
       }
 
       const res = await fetch(getTranslateApiURL() + '/translate', {
@@ -489,6 +495,16 @@
 
       translate(text, translateTarget, collectLocalTranslateContext($buttonWrapper[0], text)).then((res) => {
         if (!res.success) {
+          if (res.pending) {
+            $nextTranslation.html(`
+              <div class="zadark-translate-msg__content__title">
+                <i class="zadark-icon zadark-icon--translate"></i>
+                ${res.message}
+              </div>
+            `)
+            return
+          }
+
           $nextTranslation
             .addClass('zadark-translate-msg__content--error')
             .html('Lỗi: ' + res.message)
@@ -547,6 +563,7 @@
     collectLocalTranslateContext,
     contextItemFromElement,
     formatContextItem,
+    localTranslateNotReadyResult,
     rememberContextItems,
     reset: () => contextMemory.clear()
   }

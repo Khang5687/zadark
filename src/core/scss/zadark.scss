@@ -2490,6 +2490,30 @@ body.zadark {
     .zadark-icon--zadark {
       font-size: 24px;
     }
+
+    .zadark-local-translate-sidebar-progress {
+      position: absolute;
+      right: 12px;
+      bottom: 3px;
+      left: 12px;
+      overflow: hidden;
+      height: 3px;
+
+      border-radius: 2px;
+      background: var(--layer-background-leftmenu-selected);
+
+      &[hidden] {
+        display: none;
+      }
+
+      span {
+        display: block;
+        width: 0;
+        height: 100%;
+        background: var(--zadark-primary-base);
+        transition: width 200ms ease-out;
+      }
+    }
   }
 
   .zadark-popper {

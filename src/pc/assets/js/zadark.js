@@ -1337,6 +1337,8 @@
   const selectTranslateTargetElName = '#js-select-translate-target'
   const localTranslateStatusElName = '#js-local-translate-status'
   const localTranslateProgressElName = '#js-local-translate-progress'
+  const localTranslateSidebarProgressElName = '#js-local-translate-sidebar-progress'
+  const localTranslateSidebarProgressFillElName = '#js-local-translate-sidebar-progress-fill'
   const inputLocalTranslateStoragePathElName = '#js-input-local-translate-storage-path'
   const buttonDeleteLocalTranslateModelElName = '#js-button-delete-local-translate-model'
   const inputThreadChatBgElName = '#js-input-thread-chat-bg'
@@ -1487,6 +1489,9 @@
     <div id="div_Main_TabZaDark" class="clickable leftbar-tab flx flx-col flx-al-c flx-center rel" data-id="div_Main_TabZaDark">
       <i class="zadark-icon zadark-icon--zadark"></i>
       <div class="lb-tab-title truncate">ZaDark</div>
+      <div id="js-local-translate-sidebar-progress" class="zadark-local-translate-sidebar-progress" role="progressbar" aria-label="Tiến trình tải model dịch" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+        <span id="js-local-translate-sidebar-progress-fill"></span>
+      </div>
     </div>
   `
 
@@ -2126,6 +2131,8 @@
     const $progress = $(localTranslateProgressElName)
     const $button = $(buttonDeleteLocalTranslateModelElName)
     const $pathInput = $(inputLocalTranslateStoragePathElName)
+    const $sidebarProgress = $(localTranslateSidebarProgressElName)
+    const $sidebarProgressFill = $(localTranslateSidebarProgressFillElName)
     stopLocalTranslateStatusPolling()
 
     try {
@@ -2137,6 +2144,8 @@
       $button.data('variant-id', selected.id)
       $button.prop('disabled', !selected.installed || selected.installing)
       $progress.prop('hidden', true).val(0)
+      $sidebarProgress.prop('hidden', true).attr('aria-valuenow', 0)
+      $sidebarProgressFill.css('width', '0%')
 
       if (selected.installing) {
         const progress = selected.installProgress || {}
@@ -2144,6 +2153,11 @@
         $status.text(`Model dịch: đang tải trong nền ${percent}%`)
         $status.attr('title', progress.file || selected.storagePath)
         $progress.prop('hidden', false).val(percent)
+        $sidebarProgress
+          .prop('hidden', false)
+          .attr('aria-valuenow', percent)
+          .attr('title', `Đang tải model dịch: ${percent}%`)
+        $sidebarProgressFill.css('width', `${percent}%`)
         localTranslateStatusTimer = setTimeout(loadLocalTranslateStatus, 1000)
       } else if (selected.runtimeAvailable === false) {
         $status.text('Model dịch: runtime chưa sẵn sàng')
@@ -2160,6 +2174,8 @@
       $status.attr('title', error.message)
       $pathInput.attr('title', error.message)
       $progress.prop('hidden', true).val(0)
+      $sidebarProgress.prop('hidden', true).attr('aria-valuenow', 0)
+      $sidebarProgressFill.css('width', '0%')
       $button.prop('disabled', true)
     }
   }
@@ -2450,6 +2466,10 @@
     loadTranslate()
     loadLocalTranslateStoragePath()
     loadLocalTranslateStatus()
+    document.addEventListener('@ZaDark:LOCAL_TRANSLATE_INSTALLING', () => {
+      $(localTranslateSidebarProgressElName).prop('hidden', false)
+      setTimeout(loadLocalTranslateStatus, 250)
+    })
     loadTippy()
 
     ZaDarkUtils.migrateData()

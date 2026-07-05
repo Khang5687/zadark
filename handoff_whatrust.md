@@ -485,7 +485,7 @@ Goal: release confidence.
 
 Recent checks that have passed during this work:
 
-- `npm test`: 48 tests passing.
+- `npm test`: 49 tests passing.
 - `node src/pc/local-translate/backend.js --self-check`: passing.
 - `standard` on touched JS files: passing.
 - `npm run build`: passing, with an existing Node `fs.Stats` deprecation warning.
@@ -504,6 +504,9 @@ Recent checks that have passed during this work:
 - Speaker-aware context tests cover group labels, own messages as `[Me]`,
   same-chat memory isolation, selected-message exclusion, and image/voice
   placeholders.
+- Active model downloads are presented as a neutral pending state, with a thin
+  progress bar on the main ZaDark sidebar button; they are not labeled as
+  translation errors.
 
 ## Known ZaDark Rough Edges
 

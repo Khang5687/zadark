@@ -25,6 +25,11 @@ const HF_DEFAULT_ENDPOINT = 'https://huggingface.co'
 const RUNTIME_DIR = process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_DIR || path.join(DATA_DIR, 'runtimes')
 const RUNTIME_STATUS_TTL_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_STATUS_TTL_MS || 30 * 1000)
 const GEMMA_NOTICE_PATH = path.join(__dirname, 'GEMMA_NOTICE.txt')
+const ZALO_DATA_DIR = process.env.ZADARK_ZALO_DATA_DIR || (
+  os.platform() === 'darwin'
+    ? path.join(os.homedir(), 'Library', 'Application Support', 'ZaloData')
+    : path.join(process.env.APPDATA || path.join(os.homedir(), '.config'), 'ZaloData')
+)
 
 const state = {
   child: null,
@@ -91,6 +96,93 @@ function readJsonBody (req) {
     })
     req.on('error', reject)
   })
+}
+
+function assertMediaId (name, value, pattern) {
+  if (!pattern.test(String(value || ''))) {
+    const error = new Error(`Invalid ${name}`)
+    error.statusCode = 400
+    throw error
+  }
+}
+
+function localMediaCandidates (directory, messageId, conversationId, type) {
+  if (!fs.existsSync(directory)) return []
+
+  const prefix = `${messageId}_`
+  const conversationMarker = `_${conversationId}`
+
+  return fs.readdirSync(directory)
+    .filter((name) => name.startsWith(prefix) && name.includes(conversationMarker))
+    .map((name) => {
+      const filePath = path.join(directory, name)
+      const stat = fs.statSync(filePath)
+      if (!stat.isFile()) return null
+
+      const resolution = name.endsWith('_n')
+        ? 'normal'
+        : name.endsWith('_t') ? 'thumbnail' : 'original'
+
+      return {
+        path: filePath,
+        bytes: stat.size,
+        type,
+        resolution,
+        mime: type === 'voice'
+          ? 'audio/aac'
+          : path.basename(directory) === 'picture' ? 'image/jxl' : 'image/jpeg'
+      }
+    })
+    .filter(Boolean)
+}
+
+function resolveLocalMedia (body, zaloDataDir = ZALO_DATA_DIR) {
+  assertMediaId('conversationId', body.conversationId, /^g?\d{1,32}$/)
+  assertMediaId('messageId', body.messageId, /^\d{1,32}$/)
+  if (!['image', 'voice'].includes(body.type)) {
+    const error = new Error('Invalid media type')
+    error.statusCode = 400
+    throw error
+  }
+
+  const mediaRoot = path.join(zaloDataDir, 'media')
+  if (body.accountId) assertMediaId('accountId', body.accountId, /^\d{1,32}$/)
+  const accountIds = body.accountId
+    ? [String(body.accountId)]
+    : fs.existsSync(mediaRoot)
+      ? fs.readdirSync(mediaRoot).filter((name) => /^\d{1,32}$/.test(name))
+      : []
+
+  const candidates = accountIds.flatMap((accountId) => {
+    const resourceRoot = path.join(
+      mediaRoot,
+      accountId,
+      'ZaloDownloads',
+      'resource',
+      String(body.conversationId)
+    )
+
+    const directories = body.type === 'image'
+      ? ['Cache', 'picture']
+      : ['voice']
+
+    return directories.flatMap((name) =>
+      localMediaCandidates(path.join(resourceRoot, name), body.messageId, body.conversationId, body.type)
+        .map((candidate) => ({ ...candidate, accountId }))
+    )
+  })
+
+  const priority = { normal: 0, original: 1, thumbnail: 2 }
+  candidates.sort((left, right) =>
+    priority[left.resolution] - priority[right.resolution] ||
+    right.bytes - left.bytes
+  )
+
+  return {
+    found: candidates.length > 0,
+    preferred: candidates[0] || null,
+    candidates
+  }
 }
 
 function loadManifest () {
@@ -1279,6 +1371,12 @@ async function route (req, res) {
       })
     }
 
+    if (req.method === 'POST' && url.pathname === '/v1/local-media/resolve') {
+      const body = await readJsonBody(req)
+      const result = resolveLocalMedia(body)
+      return json(req, res, result.found ? 200 : 404, { success: result.found, ...result })
+    }
+
     if (req.method === 'POST' && url.pathname === '/v1/local-translate/install') {
       const body = await readJsonBody(req)
       const variant = selectVariant(manifest, body.variantId)
@@ -1384,6 +1482,7 @@ module.exports = {
   createSseParser,
   streamRuntimeWithRetry,
   resolveRuntimeCommand,
+  resolveLocalMedia,
   route,
   runtimeStatus,
   selectVariant,

@@ -7,7 +7,9 @@ const os = require('os')
 const path = require('path')
 
 const testRuntimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zadark-local-translate-runtime-'))
+const testZaloDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zadark-zalo-data-'))
 process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_DIR = testRuntimeDir
+process.env.ZADARK_ZALO_DATA_DIR = testZaloDataDir
 const backend = require('../src/pc/local-translate/backend')
 const runtimeZipBase64 = 'UEsDBAoAAAAAAAy241wAAAAAAAAAAAAAAAAMABwAemlwLXJ1bnRpbWUvVVQJAAPH2Udqx9lHanV4CwABBPUBAAAEFAAAAFBLAwQKAAAAAAAMtuNcAAAAAAAAAAAAAAAAEAAcAHppcC1ydW50aW1lL2Jpbi9VVAkAA8fZR2rH2UdqdXgLAAEE9QEAAAQUAAAAUEsDBAoAAAAAAAy241zihkXDEQAAABEAAAAbABwAemlwLXJ1bnRpbWUvYmluL2Zha2Utc2VydmVyVVQJAAPH2Udqx9lHanV4CwABBPUBAAAEFAAAACMhL2Jpbi9zaApleGl0IDAKUEsBAh4DCgAAAAAADLbjXAAAAAAAAAAAAAAAAAwAGAAAAAAAAAAQAO1BAAAAAHppcC1ydW50aW1lL1VUBQADx9lHanV4CwABBPUBAAAEFAAAAFBLAQIeAwoAAAAAAAy241wAAAAAAAAAAAAAAAAQABgAAAAAAAAAEADtQUYAAAB6aXAtcnVudGltZS9iaW4vVVQFAAPH2UdqdXgLAAEE9QEAAAQUAAAAUEsBAh4DCgAAAAAADLbjXOKGRcMRAAAAEQAAABsAGAAAAAAAAQAAAO2BkAAAAHppcC1ydW50aW1lL2Jpbi9mYWtlLXNlcnZlclVUBQADx9lHanV4CwABBPUBAAAEFAAAAFBLBQYAAAAAAwADAAkBAAD2AAAAAAA='
 
@@ -219,11 +221,67 @@ describe('local translate backend', () => {
     hfBaseUrl = `http://127.0.0.1:${hfAddress.port}`
   })
 
+  it('resolves full local image and voice media without trusting cache indexes', async () => {
+    const accountId = '123'
+    const conversationId = 'g456'
+    const resourceRoot = path.join(
+      testZaloDataDir,
+      'media',
+      accountId,
+      'ZaloDownloads',
+      'resource',
+      conversationId
+    )
+    fs.mkdirSync(path.join(resourceRoot, 'Cache'), { recursive: true })
+    fs.mkdirSync(path.join(resourceRoot, 'picture'), { recursive: true })
+    fs.mkdirSync(path.join(resourceRoot, 'voice'), { recursive: true })
+    fs.writeFileSync(path.join(resourceRoot, 'Cache', '789_999_g456_t'), 'thumb')
+    fs.writeFileSync(path.join(resourceRoot, 'Cache', '789_999_g456_n'), 'normal image')
+    fs.writeFileSync(path.join(resourceRoot, 'picture', '789_999_g456_hash.jxl'), 'jxl')
+    fs.writeFileSync(path.join(resourceRoot, 'voice', '790_999_g456'), 'aac')
+
+    const image = await postJson(baseUrl, '/v1/local-media/resolve', {
+      conversationId,
+      messageId: '789',
+      type: 'image'
+    })
+    const voice = await postJson(baseUrl, '/v1/local-media/resolve', {
+      conversationId,
+      messageId: '790',
+      type: 'voice'
+    })
+
+    expect(image.status).toBe(200)
+    expect(image.body.preferred.resolution).toBe('normal')
+    expect(image.body.preferred.mime).toBe('image/jpeg')
+    expect(image.body.candidates).toHaveLength(3)
+    expect(voice.status).toBe(200)
+    expect(voice.body.preferred.mime).toBe('audio/aac')
+  })
+
+  it('rejects unsafe local media identifiers and reports missing media', async () => {
+    const unsafe = await postJson(baseUrl, '/v1/local-media/resolve', {
+      conversationId: '../456',
+      messageId: '789',
+      type: 'image'
+    })
+    const missing = await postJson(baseUrl, '/v1/local-media/resolve', {
+      conversationId: 'g456',
+      messageId: '000',
+      type: 'voice'
+    })
+
+    expect(unsafe.status).toBe(400)
+    expect(missing.status).toBe(404)
+    expect(missing.body.found).toBe(false)
+  })
+
   afterAll(async () => {
     await new Promise((resolve) => server.close(resolve))
     await new Promise((resolve) => hfServer.close(resolve))
     fs.rmSync(tempDir, { recursive: true, force: true })
     fs.rmSync(testRuntimeDir, { recursive: true, force: true })
+    fs.rmSync(testZaloDataDir, { recursive: true, force: true })
   })
 
   it('parses df output for disk visualization', () => {

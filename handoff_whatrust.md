@@ -255,6 +255,26 @@ Research verdict for a later version:
   should run only after explicit user action or a clearly labeled per-chat
   opt-in.
 
+### ZaDark Local Media Acquisition
+
+ZaDark has a read-only `POST /v1/local-media/resolve` endpoint. It accepts the
+Zalo conversation ID, message ID, and `image` or `voice`, validates those
+identifiers, and searches only Zalo's media resource directories. It does not
+read encrypted message databases or trust Zalo's sometimes-stale `.rescache`
+indexes.
+
+Observed Zalo desktop contracts:
+
+- Conversation rows expose `anim-data-id`; groups retain a `g` prefix.
+- Rendered image IDs contain message, sender, and conversation IDs.
+- Normal images are extensionless JPEG `_n` cache files, originals are JXL,
+  and `_t` files are thumbnails.
+- Voice files are extensionless mono AAC.
+
+This filesystem contract is Zalo-specific. WhatRust should use its own message
+and attachment APIs and pass bytes directly to OCR/ASR rather than porting this
+resolver.
+
 ### Legal And Terms Handling
 
 Current official references checked on 2026-07-05:

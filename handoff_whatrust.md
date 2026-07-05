@@ -255,6 +255,27 @@ ZaDark now supports explicit, local OCR for image messages:
 WhatRust should preserve the product behavior but use its native attachment
 API instead of ZaDark's filesystem resolver.
 
+### Optional Context Footnotes
+
+ZaDark can add book-style AI footnotes beneath a completed local translation.
+The setting is enabled by default and can be disabled in Translation settings.
+
+- Translation renders first; note generation is a separate request and cannot
+  alter or delay the visible translated text.
+- Superscript references appear at the end of the translation. Notes are in a
+  separate block labeled `Ghi chú ngữ cảnh · AI tạo` so they cannot be mistaken
+  for sender-authored content.
+- The backend asks for at most two cultural events, idioms, acronyms, wordplay,
+  institutions, or specialized terms.
+- A conservative parser accepts only exact source phrases and rejects ordinary
+  single words, fabricated phrases, whole-sentence explanations, malformed
+  output, and excess notes.
+- Results are cached in memory by model, target language, and source text.
+- Failures are silent and never turn a successful translation into an error.
+- The current TranslateGemma model still misses some valid single-word concepts
+  and idioms. This is intentional: false negatives are safer than invented
+  default-on explanations.
+
 Research verdict for later media features:
 
 - Use separate specialized optional packs, not one large unified multimodal
@@ -528,7 +549,7 @@ Goal: release confidence.
 
 Recent checks that have passed during this work:
 
-- `npm test`: 59 tests passing.
+- `npm test`: 64 tests passing.
 - `node src/pc/local-translate/backend.js --self-check`: passing.
 - `standard` on touched JS files: passing.
 - `npm run build`: passing, with an existing Node `fs.Stats` deprecation warning.
@@ -557,6 +578,9 @@ Recent checks that have passed during this work:
 - Real OCR against the cached My Documents test image returned readable English
   text with 92% confidence. The same image resolved from Zalo's cache as a full
   JPEG, and a repeat OCR request hit the in-memory cache.
+- Real footnote generation returned a Vietnamese explanation for `Fourth of
+  July`, suppressed an ordinary invoice sentence, and hit the memory cache on
+  repeat generation.
 
 ## Known ZaDark Rough Edges
 

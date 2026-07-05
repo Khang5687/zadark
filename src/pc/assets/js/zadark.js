@@ -76,6 +76,7 @@
   const ZADARK_FONT_FAMILY_KEY = '@ZaDark:FONT_FAMILY'
   const ZADARK_FONT_SIZE_KEY = '@ZaDark:FONT_SIZE'
   const ZADARK_TRANSLATE_TARGET_KEY = '@ZaDark:TRANSLATE_TARGET'
+  const ZADARK_TRANSLATE_FOOTNOTES_KEY = '@ZaDark:TRANSLATE_FOOTNOTES'
   const ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY = '@ZaDark:LOCAL_TRANSLATE_STORAGE_PATH'
   const ZADARK_THREAD_CHAT_BG_KEY = 'THREAD_CHAT_BG' // localforage key
   const getLocalTranslateApiUrl = () => window.ZADARK_LOCAL_TRANSLATE_API_URL || 'http://127.0.0.1:5555/v1'
@@ -240,6 +241,12 @@
     },
     getTranslateTarget: () => {
       return localStorage.getItem(ZADARK_TRANSLATE_TARGET_KEY) || 'vi'
+    },
+    saveTranslateFootnotes: (enabled) => {
+      return localStorage.setItem(ZADARK_TRANSLATE_FOOTNOTES_KEY, enabled)
+    },
+    getTranslateFootnotes: () => {
+      return localStorage.getItem(ZADARK_TRANSLATE_FOOTNOTES_KEY) !== 'false'
     },
     saveLocalTranslateStoragePath: (storagePath) => {
       return localStorage.setItem(ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY, storagePath)
@@ -1335,6 +1342,7 @@
   const inputFontFamilyElName = '#js-input-font-family'
   const selectFontSizeElName = '#js-select-font-size'
   const selectTranslateTargetElName = '#js-select-translate-target'
+  const switchTranslateFootnotesElName = '#js-switch-translate-footnotes'
   const localTranslateStatusElName = '#js-local-translate-status'
   const localTranslateProgressElName = '#js-local-translate-progress'
   const localTranslateSidebarProgressElName = '#js-local-translate-sidebar-progress'
@@ -1625,6 +1633,17 @@
             </label>
 
             <select id="js-select-translate-target" class="zadark-select"></select>
+          </div>
+
+          <div class="zadark-switch">
+            <label class="zadark-switch__label zadark-switch__label--helper" for="js-switch-translate-footnotes">
+              Ghi chú ngữ cảnh do AI tạo
+              <i class="zadark-icon zadark-icon--question" data-tippy-content="Giải thích ngắn các thành ngữ, chữ viết tắt và tham chiếu văn hoá bên dưới bản dịch."></i>
+            </label>
+            <label class="zadark-switch__checkbox">
+              <input class="zadark-switch__input" type="checkbox" id="js-switch-translate-footnotes">
+              <span class="zadark-switch__slider"></span>
+            </label>
           </div>
 
           <div class="font-settings font-settings--compact">
@@ -2108,6 +2127,8 @@
 
     const useHotkeys = ZaDarkStorage.getUseHotkeys()
     ZaDarkUtils.setSwitch(switchUseHotkeysElName, useHotkeys)
+
+    ZaDarkUtils.setSwitch(switchTranslateFootnotesElName, ZaDarkStorage.getTranslateFootnotes())
   }
 
   const loadHotkeysState = () => {
@@ -2409,6 +2430,10 @@
       if (translateTarget !== 'none') {
         $(document).enableTranslateMessage(translateTarget)
       }
+    })
+
+    $(switchTranslateFootnotesElName).on('change', function () {
+      ZaDarkStorage.saveTranslateFootnotes($(this).is(':checked'))
     })
 
     $(inputLocalTranslateStoragePathElName).on('blur', handleLocalTranslateStoragePathChange)

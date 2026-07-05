@@ -1,5 +1,6 @@
 (function ($) {
   const ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY = '@ZaDark:LOCAL_TRANSLATE_STORAGE_PATH'
+  const ZADARK_TRANSLATE_FOOTNOTES_KEY = '@ZaDark:TRANSLATE_FOOTNOTES'
 
   const getTranslateApiURL = () => {
     if (document.body.classList.contains('zadark-pc')) {
@@ -20,6 +21,10 @@
 
     const storagePath = getLocalTranslateStoragePath()
     return storagePath ? { storagePath } : {}
+  }
+
+  const isTranslateFootnotesEnabled = () => {
+    return isLocalTranslate() && localStorage.getItem(ZADARK_TRANSLATE_FOOTNOTES_KEY) !== 'false'
   }
 
   const formatBytes = (bytes) => {
@@ -653,6 +658,64 @@
     }
   }
 
+  const getTranslationFootnotes = async (text, target, signal) => {
+    const res = await fetch(getTranslateApiURL() + '/footnotes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      signal,
+      body: JSON.stringify({
+        text,
+        target,
+        ...localTranslateStoragePayload()
+      })
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) throw new Error(json.message || 'Không thể tạo ghi chú')
+    return Array.isArray(json.notes) ? json.notes : []
+  }
+
+  const renderTranslationFootnotes = ($wrapper, $output, notes) => {
+    if (!notes.length) return
+
+    const $references = $('<span>').addClass('zadark-translate-footnotes__references')
+    const $footnotes = $('<div>').addClass('zadark-translate-footnotes')
+    const $heading = $('<div>')
+      .addClass('zadark-translate-footnotes__heading')
+      .text('Ghi chú ngữ cảnh · AI tạo')
+    $footnotes.append($heading)
+
+    notes.forEach((note, index) => {
+      const number = index + 1
+      const $item = $('<div>').addClass('zadark-translate-footnotes__item')
+      const $number = $('<sup>').text(number)
+      const $text = $('<span>')
+      $text.append($('<q>').text(note.term), document.createTextNode(` — ${note.note}`))
+      $item.append($number, $text)
+
+      const $reference = $('<button>')
+        .addClass('zadark-translate-footnotes__reference')
+        .attr('type', 'button')
+        .attr('aria-label', `Xem ghi chú ${number} do AI tạo`)
+        .attr('title', `Xem ghi chú ${number}`)
+        .text(number)
+      $reference.on('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        $item.addClass('zadark-translate-footnotes__item--active')
+        setTimeout(() => $item.removeClass('zadark-translate-footnotes__item--active'), 1200)
+        $item[0].scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      })
+
+      $references.append($reference)
+      $footnotes.append($item)
+    })
+
+    $output.append($references)
+    $wrapper.append($footnotes)
+  }
+
   const isValidURL = (string) => {
     const regex = /^(https?:\/\/)[\w.-]+(\.[a-z]{2,})+([/?].*)?$/i
     return regex.test(string)
@@ -811,6 +874,15 @@
         $nextTranslation.removeClass('zadark-translate-msg__content--error zadark-translate-msg__content--interrupted')
         setTitle(result.languageName || 'Bản dịch')
         $output.text(result.translation).attr('aria-label', 'Bản dịch hoàn tất')
+
+        if (isTranslateFootnotesEnabled()) {
+          try {
+            const notes = await getTranslationFootnotes(sourceText, translateTarget, controller.signal)
+            if (isCurrent()) renderTranslationFootnotes($nextTranslation, $output, notes)
+          } catch (error) {
+            if (error.name === 'AbortError') throw error
+          }
+        }
       })().catch((error) => {
         if (error.name !== 'AbortError' && isCurrent()) showFailure(error)
       }).finally(() => {
@@ -877,6 +949,7 @@
     createNdjsonParser,
     parseImageIdentity,
     localTranslateNotReadyResult,
+    isTranslateFootnotesEnabled,
     rememberContextItems,
     reset: () => contextMemory.clear()
   }

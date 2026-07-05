@@ -210,6 +210,14 @@ describe('local translate context', () => {
     )).toEqual([])
   })
 
+  it('enables optional AI footnotes by default and respects opt-out', () => {
+    localStorage.removeItem('@ZaDark:TRANSLATE_FOOTNOTES')
+    expect(window.ZaDarkTranslateContext.isTranslateFootnotesEnabled()).toBe(true)
+
+    localStorage.setItem('@ZaDark:TRANSLATE_FOOTNOTES', 'false')
+    expect(window.ZaDarkTranslateContext.isTranslateFootnotesEnabled()).toBe(false)
+  })
+
   it('parses fragmented and combined NDJSON stream events', () => {
     const events = []
     const parser = window.ZaDarkTranslateContext.createNdjsonParser((event) => events.push(event))

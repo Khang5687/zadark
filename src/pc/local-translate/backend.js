@@ -17,6 +17,7 @@ const MAX_BODY_BYTES = 1024 * 1024
 const MAX_CONTEXT_ITEMS = 10
 const MAX_CONTEXT_CHARS = 4000
 const TRANSLATION_CACHE_LIMIT = 100
+const FOOTNOTE_CACHE_LIMIT = 100
 const STREAM_QUEUE_LIMIT = 8
 const OCR_QUEUE_LIMIT = 4
 const OCR_CACHE_LIMIT = 50
@@ -45,6 +46,7 @@ const state = {
 }
 const installs = new Map()
 const translationCache = new Map()
+const footnoteCache = new Map()
 const runtimeStatusCache = new Map()
 const ocrInstalls = new Map()
 const ocrCache = new Map()
@@ -1127,6 +1129,105 @@ function languageName (code) {
   }
 }
 
+function parseFootnotes (raw, sourceText) {
+  const source = String(sourceText || '')
+  const start = String(raw || '').indexOf('[')
+  const end = String(raw || '').lastIndexOf(']')
+  let parsed = []
+  if (start >= 0 && end > start) {
+    try {
+      parsed = JSON.parse(String(raw).slice(start, end + 1))
+    } catch (error) {}
+  }
+  if (!Array.isArray(parsed) || !parsed.length) {
+    parsed = String(raw || '').split(/\r?\n/).map((line) => {
+      const parts = line.replace(/^[-*\d.\s]+/, '').split('||')
+      return parts.length >= 2
+        ? { term: parts.shift().trim(), note: parts.join('||').trim() }
+        : null
+    }).filter(Boolean)
+  }
+
+  const wholeSource = source.replace(/[\s.!?]+/g, ' ').trim()
+  const seen = new Set()
+  return parsed.slice(0, 4).reduce((notes, item) => {
+    const term = String((item && item.term) || '').trim()
+    const note = String((item && item.note) || '').replace(/\s+/g, ' ').trim()
+    const words = term.split(/\s+/).filter(Boolean)
+    const codedTerm = /[A-Z]{2,}|\d|[-/]/.test(term)
+    const phrase = words.length >= 2 && words.length <= 8
+    const key = term.toLowerCase()
+
+    if (notes.length >= 2 || !term || !source.includes(term) || seen.has(key)) return notes
+    if (term.replace(/[\s.!?]+/g, ' ').trim() === wholeSource) return notes
+    if ((!phrase && !codedTerm) || note.length < 8 || note.length > 240) return notes
+
+    seen.add(key)
+    notes.push({ term, note })
+    return notes
+  }, [])
+}
+
+function buildFootnotePrompt (body) {
+  const target = body.target || 'vi'
+  const targetLanguage = languageName(target)
+  const source = JSON.stringify(String(body.text || '').slice(0, MAX_CONTEXT_CHARS)).replace(/</g, '\\u003c')
+  return `<start_of_turn>user
+Task: create optional cultural footnotes for a reader of ${targetLanguage} (${target}). A footnote is allowed ONLY for a culture-specific named event, idiom, acronym, wordplay, institution, or specialized term whose meaning is not clear from translation. Do NOT translate or explain ordinary sentences, names, dates, or common words. For cultural events, state the country and what the event commemorates, not only its date. Each TERM must be copied exactly from SOURCE_JSON. Output NONE when no footnote is necessary. Otherwise output at most 2 lines exactly as TERM || ${targetLanguage} explanation in 8-25 words.
+Example: SOURCE_JSON: "I will send the invoice tomorrow." OUTPUT: NONE
+Example: SOURCE_JSON: "It is a Fourth of July weekend." OUTPUT: Fourth of July || A United States holiday celebrating independence on July 4.
+SOURCE_JSON: ${source}
+OUTPUT:<end_of_turn>
+<start_of_turn>model
+`
+}
+
+function setCachedFootnotes (key, value) {
+  footnoteCache.delete(key)
+  footnoteCache.set(key, value)
+  while (footnoteCache.size > FOOTNOTE_CACHE_LIMIT) {
+    footnoteCache.delete(footnoteCache.keys().next().value)
+  }
+}
+
+async function generateFootnotes (body) {
+  const text = String(body.text || '').trim().slice(0, MAX_CONTEXT_CHARS)
+  if (!text) throw new Error('Missing text')
+
+  const manifest = loadManifest()
+  const variant = state.variant || selectVariant(manifest, body.variantId)
+  const key = JSON.stringify({ variant: variant.id, target: body.target || 'vi', text })
+  const cached = footnoteCache.get(key)
+  if (cached) return { success: true, notes: cached, cached: true }
+
+  if (process.env.ZADARK_LOCAL_TRANSLATE_MOCK === '1') {
+    const notes = text.includes('Fourth of July')
+      ? [{ term: 'Fourth of July', note: 'Ngày Độc lập Hoa Kỳ, diễn ra vào ngày 4 tháng 7.' }]
+      : []
+    setCachedFootnotes(key, notes)
+    return { success: true, notes, supported: true }
+  }
+
+  const root = storageRoot(body.storagePath)
+  assertModelInstalled(variant, root)
+  if (variant.runtime === 'mlx') return { success: true, notes: [], supported: false }
+
+  startRuntime(variant, root)
+  const upstream = process.env.ZADARK_LOCAL_TRANSLATE_UPSTREAM || runtimeBaseUrl(variant, root)
+  const response = await enqueueStream(() => postJsonWithRetry(`${upstream}/completions`, {
+    model: variant.modelRef || variant.model,
+    prompt: buildFootnotePrompt({ ...body, text }),
+    max_tokens: 220,
+    temperature: 0,
+    stop: ['<end_of_turn>']
+  }))
+  const content = response && response.choices && response.choices[0] && response.choices[0].text
+  const notes = parseFootnotes(content, text)
+  setCachedFootnotes(key, notes)
+  scheduleIdleStop()
+  return { success: true, notes, supported: true }
+}
+
 function buildTranslationRequest (variant, body) {
   const source = body.source || 'auto'
   const target = body.target || 'vi'
@@ -1188,6 +1289,9 @@ function clearVariantTranslationCache (variantId) {
     if (key.startsWith(`{"variant":"${variantId}"`)) {
       translationCache.delete(key)
     }
+  }
+  for (const key of footnoteCache.keys()) {
+    if (key.startsWith(`{"variant":"${variantId}"`)) footnoteCache.delete(key)
   }
 }
 
@@ -1623,6 +1727,11 @@ async function route (req, res) {
       return json(req, res, 200, await recognizeLocalImage(body))
     }
 
+    if (req.method === 'POST' && url.pathname === '/v1/footnotes') {
+      const body = await readJsonBody(req)
+      return json(req, res, 200, await generateFootnotes(body))
+    }
+
     if (req.method === 'POST' && url.pathname === '/v1/local-translate/install') {
       const body = await readJsonBody(req)
       const variant = selectVariant(manifest, body.variantId)
@@ -1719,6 +1828,7 @@ if (require.main === module) {
 
 module.exports = {
   buildTranslationRequest,
+  buildFootnotePrompt,
   detectHardware,
   getDiskInfo,
   installVariant,
@@ -1731,6 +1841,7 @@ module.exports = {
   resolveLocalMedia,
   recognizeLocalImage,
   ocrStatus,
+  parseFootnotes,
   route,
   runtimeStatus,
   selectVariant,

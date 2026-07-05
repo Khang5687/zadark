@@ -94,6 +94,51 @@
       cursor: pointer;
     }
 
+    .zadark-translate-footnotes__references {
+      display: inline-flex;
+      gap: 2px;
+      margin-left: 3px;
+      vertical-align: super;
+    }
+
+    .zadark-translate-footnotes__reference {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--zadark-primary-base);
+      font-size: 10px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .zadark-translate-footnotes {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--zadark-border-base);
+      color: var(--text-quote);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .zadark-translate-footnotes__heading {
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
+    .zadark-translate-footnotes__item {
+      display: grid;
+      grid-template-columns: 14px minmax(0, 1fr);
+      transition: background-color 150ms ease;
+
+      q {
+        font-weight: 600;
+      }
+    }
+
+    .zadark-translate-footnotes__item--active {
+      background: rgba(128, 128, 128, 0.12);
+    }
+
     .zadark-icon {
       position: relative;
       top: 2px;

@@ -374,6 +374,64 @@ describe('local translate backend', () => {
     expect(request).not.toHaveProperty('chat_template_kwargs')
   })
 
+  it('keeps only conservative footnotes copied from the source', () => {
+    const source = 'Fourth of July weekend before EOD.'
+    const notes = backend.parseFootnotes(`\`\`\`json
+      [
+        {"term":"Fourth of July","note":"Ngày Độc lập Hoa Kỳ, diễn ra vào ngày 4 tháng 7."},
+        {"term":"EOD","note":"Viết tắt của End of Day, nghĩa là cuối ngày."},
+        {"term":"invoice","note":"An ordinary word that should not appear."}
+      ]
+    \`\`\``, source)
+
+    expect(notes).toEqual([
+      { term: 'Fourth of July', note: 'Ngày Độc lập Hoa Kỳ, diễn ra vào ngày 4 tháng 7.' },
+      { term: 'EOD', note: 'Viết tắt của End of Day, nghĩa là cuối ngày.' }
+    ])
+    expect(backend.parseFootnotes('[{"term":"Monday","note":"A fabricated cultural explanation."}]', 'Call me Monday.')).toEqual([])
+    expect(backend.parseFootnotes('[{"term":"Send the invoice.","note":"A translated sentence instead of a footnote."}]', 'Send the invoice.')).toEqual([])
+    expect(backend.parseFootnotes('not json', source)).toEqual([])
+    expect(backend.parseFootnotes(
+      'Fourth of July || Ngày Độc lập Hoa Kỳ, diễn ra vào ngày 4 tháng 7.',
+      source
+    )).toEqual([
+      { term: 'Fourth of July', note: 'Ngày Độc lập Hoa Kỳ, diễn ra vào ngày 4 tháng 7.' }
+    ])
+  })
+
+  it('builds a bounded footnote prompt for the target language', () => {
+    const prompt = backend.buildFootnotePrompt({
+      text: 'Fourth of July',
+      target: 'vi'
+    })
+
+    expect(prompt).toContain('Vietnamese (vi)')
+    expect(prompt).toContain('SOURCE_JSON: "Fourth of July"')
+    expect(prompt).toContain('at most 2 lines')
+  })
+
+  it('returns optional footnotes without changing the translation response', async () => {
+    process.env.ZADARK_LOCAL_TRANSLATE_MOCK = '1'
+    try {
+      const withNote = await postJson(baseUrl, '/v1/footnotes', {
+        text: 'Fourth of July holiday weekend.',
+        target: 'vi'
+      })
+      const withoutNote = await postJson(baseUrl, '/v1/footnotes', {
+        text: 'I will send the invoice tomorrow.',
+        target: 'vi'
+      })
+
+      expect(withNote.status).toBe(200)
+      expect(withNote.body.notes).toEqual([
+        { term: 'Fourth of July', note: 'Ngày Độc lập Hoa Kỳ, diễn ra vào ngày 4 tháng 7.' }
+      ])
+      expect(withoutNote.body.notes).toEqual([])
+    } finally {
+      delete process.env.ZADARK_LOCAL_TRANSLATE_MOCK
+    }
+  })
+
   it('parses UTF-8 SSE data split at arbitrary byte boundaries', () => {
     const events = []
     const parser = backend.createSseParser((data) => events.push(data))

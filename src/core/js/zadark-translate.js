@@ -148,7 +148,7 @@
   }
 
   const messageText = (messageEl) => {
-    const text = firstText(messageEl, ['span-15'])
+    const text = firstText(messageEl, ['span-15', 'div-15'])
     if (text) return text
     return mediaPlaceholder(messageEl)
   }
@@ -518,7 +518,7 @@
       $(this).on('mouseenter.zadark-translate-msg', '.card', function (e) {
         const $card = $(this)
         const $content = $card
-        const $text = $content.find('div > span-15')
+        const $text = $content.find('div > span-15, div > div-15')
 
         addTranslateListener($card, $content, $text, translateTarget)
       })
@@ -526,7 +526,7 @@
       $(this).on('mouseenter.zadark-translate-msg', '.chatImageMessage,.chatImageMessage--audit', function (e) {
         const $card = $(this).find('.img-msg-v2__ft')
         const $content = $(this).find('.img-msg-v2__cap')
-        const $text = $content.find('span-15')
+        const $text = $content.find('span-15, div-15')
 
         addTranslateListener($card, $content, $text, translateTarget)
       })

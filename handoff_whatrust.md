@@ -216,6 +216,7 @@ Current context behavior:
   and sender inference when the inner `.card` lacks metadata.
 - The selected message is excluded from context.
 - Own outgoing messages are marked `[Me]`.
+- Text extraction supports both `span-15` and newer `div-15` Zalo text nodes.
 - Images/videos without captions become short placeholders.
 - Voice messages become placeholders only; ZaDark does not transcribe voice in
   this release.
@@ -484,7 +485,7 @@ Goal: release confidence.
 
 Recent checks that have passed during this work:
 
-- `npm test`: 46 tests passing.
+- `npm test`: 47 tests passing.
 - `node src/pc/local-translate/backend.js --self-check`: passing.
 - `standard` on touched JS files: passing.
 - `npm run build`: passing, with an existing Node `fs.Stats` deprecation warning.

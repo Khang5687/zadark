@@ -82,6 +82,12 @@ describe('local translate context', () => {
     expect(context).toEqual(['[Alice] Okay.'])
   })
 
+  it('reads newer Zalo div-15 text nodes', () => {
+    document.body.innerHTML = '<div class="card incoming" data-sender-name="Alice"><div-15>New text node.</div-15></div>'
+
+    expect(window.ZaDarkTranslateContext.formatContextItem(window.ZaDarkTranslateContext.contextItemFromElement(document.querySelector('.card')))).toBe('[Alice] New text node.')
+  })
+
   it('uses media placeholders when captions are unavailable', () => {
     const image = document.createElement('div')
     image.className = 'chatImageMessage incoming'

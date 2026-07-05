@@ -192,14 +192,29 @@ Important safety behavior:
 
 ### Prompt And Context
 
-ZaDark sends bounded nearby message context, not training data.
+ZaDark sends bounded per-chat context, not training data.
 
 Current limits:
 
 - `MAX_CONTEXT_ITEMS = 10`.
 - `MAX_CONTEXT_CHARS = 4000`.
 - Translation cache size: `100` entries.
+- Frontend rolling memory: memory-only, keyed by current conversation id.
+- Frontend rolling memory cap: about 50 messages / 8k chars per chat, 100 chats
+  globally.
 - llama.cpp context size flag: `-c 2048`.
+
+Current context behavior:
+
+- Visible messages before the selected message are collected first.
+- A small per-chat memory fills gaps when older loaded messages disappear from
+  the DOM.
+- Context lines include speaker labels such as `[Me]`, `[Alice]`, or `[Them]`.
+- The selected message is excluded from context.
+- Own outgoing messages are marked `[Me]`.
+- Images/videos without captions become short placeholders.
+- Voice messages become placeholders only; ZaDark does not transcribe voice in
+  this release.
 
 Important caveat: context is heuristic. It can help disambiguate, but it is not
 guaranteed. It should not be described to users as "learning" or "indexing".
@@ -436,6 +451,7 @@ Goal: release confidence.
 - Runtime crash/restart tests.
 - Install interruption tests.
 - Bounded context tests.
+- Speaker/own-message/media-placeholder context tests.
 - Privacy/logging audit.
 - Legal/terms review.
 
@@ -443,7 +459,7 @@ Goal: release confidence.
 
 Recent checks that have passed during this work:
 
-- `npm test`: 38 tests passing.
+- `npm test`: 42 tests passing.
 - `node src/pc/local-translate/backend.js --self-check`: passing.
 - `standard` on touched JS files: passing.
 - `npm run build`: passing, with an existing Node `fs.Stats` deprecation warning.
@@ -455,6 +471,9 @@ Recent checks that have passed during this work:
 - A real translation returned Vietnamese output.
 - Cache hit was observed on repeat translation.
 - Delete model path was tested and removed model data.
+- Speaker-aware context tests cover group labels, own messages as `[Me]`,
+  same-chat memory isolation, selected-message exclusion, and image/voice
+  placeholders.
 
 ## Known ZaDark Rough Edges
 
@@ -463,7 +482,11 @@ Recent checks that have passed during this work:
 - The model is large, around 2.4 GB for the current GGUF.
 - Source auto-detection is prompt/model-driven, not a deterministic language ID
   pipeline.
-- Context improves disambiguation only heuristically.
+- Context improves disambiguation only heuristically and only for messages
+  currently visible or already seen during this app session.
+- Voice messages are placeholders only; local ASR is intentionally deferred.
+- Image understanding is deferred; current image handling is caption text or a
+  placeholder.
 - MLX support is present as an option but llama.cpp Metal is the practical
   baseline.
 - Windows GPU support is intentionally deferred.

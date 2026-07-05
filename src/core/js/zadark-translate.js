@@ -33,6 +33,158 @@
 
   const normalizeContextText = (text) => String(text || '').replace(/\s+/g, ' ').trim()
 
+  const CONTEXT_MESSAGE_SELECTOR = '.card,.chatImageMessage,.chatImageMessage--audit'
+  const CONTEXT_VISIBLE_LIMIT = 12
+  const CONTEXT_MEMORY_MESSAGE_LIMIT = 50
+  const CONTEXT_MEMORY_CHAT_LIMIT = 100
+  const CONTEXT_MEMORY_CHAR_LIMIT = 8000
+  const contextMemory = new Map()
+
+  const getCurrentConvId = () => {
+    return document.body.getAttribute('data-current-conv-id') || 'unknown'
+  }
+
+  const nodeText = (node) => normalizeContextText(node && node.textContent)
+
+  const firstText = (root, selectors) => {
+    if (!root) return ''
+    for (const selector of selectors) {
+      const node = root.querySelector(selector)
+      const text = nodeText(node)
+      if (text) return text
+    }
+    return ''
+  }
+
+  const classText = (node) => {
+    return String(node && node.className && typeof node.className === 'string' ? node.className : '').toLowerCase()
+  }
+
+  const inferDirection = (messageEl) => {
+    const classes = classText(messageEl).split(/\s+/)
+    if (classes.some((name) => /(^|[-_])(me|mine|self|sent|send|outgoing|right)($|[-_])/.test(name))) return 'outgoing'
+    if (classes.some((name) => /(^|[-_])(other|incoming|left)($|[-_])/.test(name))) return 'incoming'
+    return 'unknown'
+  }
+
+  const inferSpeaker = (messageEl, direction) => {
+    if (direction === 'outgoing') return 'Me'
+
+    const explicit = messageEl && (
+      messageEl.getAttribute('data-sender-name') ||
+      messageEl.getAttribute('data-author') ||
+      messageEl.getAttribute('aria-label')
+    )
+    if (explicit) return normalizeContextText(explicit).slice(0, 40)
+
+    const speaker = firstText(messageEl, [
+      '[class*="sender"]',
+      '[class*="author"]',
+      '[class*="from"]',
+      '[class*="name"]'
+    ])
+    return speaker ? speaker.slice(0, 40) : (direction === 'incoming' ? 'Them' : 'Unknown')
+  }
+
+  const mediaPlaceholder = (messageEl) => {
+    if (!messageEl) return ''
+    const classes = classText(messageEl)
+    if (/(voice|audio)/.test(classes) || messageEl.querySelector('[class*="voice"],[class*="audio"],audio')) return 'sent a voice message'
+    if (/(file|attach|document)/.test(classes) || messageEl.querySelector('[class*="file"],[class*="attach"],[class*="document"]')) {
+      const fileName = firstText(messageEl, ['[class*="file"]', '[class*="document"]'])
+      return fileName ? `sent file: ${fileName}` : 'sent a file'
+    }
+    if (/(video)/.test(classes) || messageEl.querySelector('video')) return 'sent a video'
+    if (messageEl.matches('.chatImageMessage,.chatImageMessage--audit') || messageEl.querySelector('img')) return 'sent an image'
+    return ''
+  }
+
+  const messageText = (messageEl) => {
+    const text = firstText(messageEl, ['span-15'])
+    if (text) return text
+    return mediaPlaceholder(messageEl)
+  }
+
+  const contextKey = (item) => [item.speaker, item.text].join('\n')
+
+  const formatContextItem = (item) => {
+    return `[${item.speaker || 'Unknown'}] ${item.text}`
+  }
+
+  const trimMemory = (convId) => {
+    const items = contextMemory.get(convId) || []
+    let used = 0
+    const kept = []
+    items.slice().reverse().forEach((item) => {
+      if (kept.length >= CONTEXT_MEMORY_MESSAGE_LIMIT) return
+      used += item.text.length
+      if (used > CONTEXT_MEMORY_CHAR_LIMIT) return
+      kept.push(item)
+    })
+    contextMemory.set(convId, kept.reverse())
+
+    while (contextMemory.size > CONTEXT_MEMORY_CHAT_LIMIT) {
+      contextMemory.delete(contextMemory.keys().next().value)
+    }
+  }
+
+  const rememberContextItems = (convId, items) => {
+    if (!convId || !items.length) return
+    const existing = contextMemory.get(convId) || []
+    const keys = new Set(existing.map(contextKey))
+    items.forEach((item) => {
+      if (!item.text || keys.has(contextKey(item))) return
+      existing.push(item)
+      keys.add(contextKey(item))
+    })
+    contextMemory.set(convId, existing)
+    trimMemory(convId)
+  }
+
+  const contextItemFromElement = (messageEl) => {
+    const text = messageText(messageEl)
+    if (!text || isValidURL(text)) return null
+
+    const direction = inferDirection(messageEl)
+    return {
+      speaker: inferSpeaker(messageEl, direction),
+      direction,
+      text
+    }
+  }
+
+  const visibleMessageElements = () => Array.from(document.querySelectorAll(CONTEXT_MESSAGE_SELECTOR))
+
+  const collectLocalTranslateContext = (anchorEl, currentText) => {
+    if (!isLocalTranslate()) return []
+
+    const messageEl = anchorEl && anchorEl.closest && anchorEl.closest(CONTEXT_MESSAGE_SELECTOR)
+    if (!messageEl) return []
+
+    const convId = getCurrentConvId()
+    const currentContextText = normalizeContextText(currentText)
+    const allItems = visibleMessageElements()
+      .map((el) => ({ el, item: contextItemFromElement(el) }))
+      .filter(({ item }) => item)
+
+    rememberContextItems(convId, allItems.map(({ item }) => item))
+
+    const selectedIndex = allItems.findIndex(({ el }) => el === messageEl)
+    const visibleBefore = (selectedIndex >= 0 ? allItems.slice(0, selectedIndex) : allItems)
+      .map(({ item }) => item)
+      .filter((item) => item.text !== currentContextText)
+      .slice(-CONTEXT_VISIBLE_LIMIT)
+
+    const visibleKeys = new Set(visibleBefore.map(contextKey))
+    const memoryBefore = (contextMemory.get(convId) || [])
+      .filter((item) => item.text !== currentContextText && !visibleKeys.has(contextKey(item)))
+      .slice(-CONTEXT_VISIBLE_LIMIT)
+
+    return memoryBefore.concat(visibleBefore)
+      .slice(-CONTEXT_VISIBLE_LIMIT)
+      .map(formatContextItem)
+  }
+
   const getLocalTranslateStatus = async () => {
     const storagePath = getLocalTranslateStoragePath()
     const query = storagePath ? `?storagePath=${encodeURIComponent(storagePath)}` : ''
@@ -235,26 +387,6 @@
     return regex.test(string)
   }
 
-  const collectLocalTranslateContext = ($anchor, currentText) => {
-    if (!isLocalTranslate()) return []
-
-    const $message = $anchor.closest('.card,.chatImageMessage,.chatImageMessage--audit')
-    if (!$message.length) return []
-
-    const context = []
-    const currentContextText = normalizeContextText(currentText)
-    $message.prevAll('.card,.chatImageMessage,.chatImageMessage--audit').each(function () {
-      if (context.length >= 10) return false
-
-      const text = normalizeContextText($(this).find('span-15').first().text())
-      if (!text || text === currentContextText || isValidURL(text)) return
-
-      context.push(text)
-    })
-
-    return context.reverse()
-  }
-
   /**
    *
    * @param {jQuery} $buttonWrapper Element will have "translation button" added.
@@ -306,7 +438,7 @@
 
       $resultWrapper.append($nextTranslation)
 
-      translate(text, translateTarget, collectLocalTranslateContext($buttonWrapper, text)).then((res) => {
+      translate(text, translateTarget, collectLocalTranslateContext($buttonWrapper[0], text)).then((res) => {
         if (!res.success) {
           $nextTranslation
             .addClass('zadark-translate-msg__content--error')
@@ -360,6 +492,14 @@
       // Remove translate button
       $(this).find('.zadark-translate-msg__button').remove()
     })
+  }
+
+  window.ZaDarkTranslateContext = {
+    collectLocalTranslateContext,
+    contextItemFromElement,
+    formatContextItem,
+    rememberContextItems,
+    reset: () => contextMemory.clear()
   }
 
   const LANGUAGES = [

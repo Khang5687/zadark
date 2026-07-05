@@ -497,6 +497,10 @@ Recent checks that have passed during this work:
 - A real translation returned Vietnamese output.
 - Cache hit was observed on repeat translation.
 - Delete model path was tested and removed model data.
+- A 2026-07-05 non-UI recheck confirmed that the backend still detects the
+  Apple Silicon host, selects the Metal llama.cpp variant, finds the bundled
+  27 MB runtime, and reports the deleted GGUF as not installed. A translation
+  request then returned `Model is not installed` without starting a download.
 - Speaker-aware context tests cover group labels, own messages as `[Me]`,
   same-chat memory isolation, selected-message exclusion, and image/voice
   placeholders.

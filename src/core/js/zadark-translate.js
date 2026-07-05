@@ -620,6 +620,10 @@
     return result
   }
 
+  const collectTranslationContext = (anchorEl, currentText, imageIdentity) => {
+    return imageIdentity ? [] : collectLocalTranslateContext(anchorEl, currentText)
+  }
+
   const translate = async (text, target, context = []) => {
     try {
       const readiness = await ensureLocalTranslateReady()
@@ -776,7 +780,7 @@
           }
         }
 
-        const context = collectLocalTranslateContext($buttonWrapper[0], sourceText)
+        const context = collectTranslationContext($buttonWrapper[0], sourceText, imageIdentity)
         let result
 
         if (supportsStreaming) {
@@ -867,6 +871,7 @@
 
   window.ZaDarkTranslateContext = {
     collectLocalTranslateContext,
+    collectTranslationContext,
     contextItemFromElement,
     formatContextItem,
     createNdjsonParser,

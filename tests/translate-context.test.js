@@ -196,6 +196,20 @@ describe('local translate context', () => {
     expect(window.ZaDarkTranslateContext.parseImageIdentity(image)).toBeNull()
   })
 
+  it('does not send unrelated chat context with image OCR text', () => {
+    document.body.innerHTML = `
+      <div class="card incoming" data-sender-name="Alice"><span-15>Unrelated private message.</span-15></div>
+      <div class="chatImageMessage"><img></div>
+    `
+
+    const imageMessage = document.querySelector('.chatImageMessage')
+    expect(window.ZaDarkTranslateContext.collectTranslationContext(
+      imageMessage,
+      'Recognized image text',
+      { messageId: '1', conversationId: '2' }
+    )).toEqual([])
+  })
+
   it('parses fragmented and combined NDJSON stream events', () => {
     const events = []
     const parser = window.ZaDarkTranslateContext.createNdjsonParser((event) => events.push(event))

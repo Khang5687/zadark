@@ -31,10 +31,21 @@
 
   .card:hover,
   .chatImageMessage:hover,
-  .chatImageMessage--audit:hover {
+  .chatImageMessage--audit:hover,
+  .zadark-ocr-image-anchor:hover {
     .zadark-translate-msg__button {
       opacity: 1;
     }
+  }
+
+  .zadark-ocr-image-anchor {
+    position: relative;
+  }
+
+  .zadark-translate-msg__button--image {
+    left: 8px;
+    bottom: 8px;
+    transform: none;
   }
 
   .zadark-translate-msg__content {

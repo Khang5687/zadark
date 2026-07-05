@@ -176,6 +176,26 @@ describe('local translate context', () => {
     })
   })
 
+  it('parses cached Zalo image identities without trusting arbitrary paths', () => {
+    const image = document.createElement('img')
+    image.id = 'img-1783263115819.252609586847894308.3099821550516528801-main'
+
+    expect(window.ZaDarkTranslateContext.parseImageIdentity(image)).toEqual({
+      messageId: '1783263115819',
+      conversationId: '3099821550516528801'
+    })
+
+    image.id = ''
+    image.src = 'file:///tmp/1783245078009_123_g3153313052979372135_hash_n'
+    expect(window.ZaDarkTranslateContext.parseImageIdentity(image)).toEqual({
+      messageId: '1783245078009',
+      conversationId: 'g3153313052979372135'
+    })
+
+    image.src = 'file:///tmp/not-zalo-media.jpg'
+    expect(window.ZaDarkTranslateContext.parseImageIdentity(image)).toBeNull()
+  })
+
   it('parses fragmented and combined NDJSON stream events', () => {
     const events = []
     const parser = window.ZaDarkTranslateContext.createNdjsonParser((event) => events.push(event))

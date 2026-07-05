@@ -276,6 +276,52 @@ describe('local translate backend', () => {
     expect(missing.body.found).toBe(false)
   })
 
+  it('recognizes a resolved image and caches the OCR result', async () => {
+    const resourceRoot = path.join(
+      testZaloDataDir,
+      'media',
+      '123',
+      'ZaloDownloads',
+      'resource',
+      'g456',
+      'Cache'
+    )
+    fs.mkdirSync(resourceRoot, { recursive: true })
+    fs.writeFileSync(path.join(resourceRoot, '791_999_g456_n'), 'test image')
+    process.env.ZADARK_LOCAL_OCR_MOCK = '1'
+
+    try {
+      const body = {
+        conversationId: 'g456',
+        messageId: '791'
+      }
+      const first = await postJson(baseUrl, '/v1/ocr', body)
+      const second = await postJson(baseUrl, '/v1/ocr', body)
+
+      expect(first.status).toBe(200)
+      expect(first.body.text).toBe('[OCR] test image')
+      expect(first.body.confidence).toBe(100)
+      expect(first.body.cached).toBeUndefined()
+      expect(second.body.cached).toBe(true)
+    } finally {
+      delete process.env.ZADARK_LOCAL_OCR_MOCK
+    }
+  })
+
+  it('reports the optional OCR pack size for the selected storage path', async () => {
+    const storagePath = path.join(tempDir, 'ocr-status')
+    const status = await requestJson(
+      baseUrl,
+      `/v1/local-ocr/status?storagePath=${encodeURIComponent(storagePath)}`
+    )
+
+    expect(status.status).toBe(200)
+    expect(status.body.installed).toBe(false)
+    expect(status.body.runtimeAvailable).toBe(true)
+    expect(status.body.downloadEstimatedBytes).toBe(4644363)
+    expect(status.body.storagePath).toBe(storagePath)
+  })
+
   afterAll(async () => {
     await new Promise((resolve) => server.close(resolve))
     await new Promise((resolve) => hfServer.close(resolve))

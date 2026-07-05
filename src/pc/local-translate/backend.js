@@ -18,6 +18,9 @@ const MAX_CONTEXT_ITEMS = 10
 const MAX_CONTEXT_CHARS = 4000
 const TRANSLATION_CACHE_LIMIT = 100
 const STREAM_QUEUE_LIMIT = 8
+const OCR_QUEUE_LIMIT = 4
+const OCR_CACHE_LIMIT = 50
+const MAX_OCR_IMAGE_BYTES = 25 * 1024 * 1024
 const MANIFEST_PATH = process.env.ZADARK_LOCAL_TRANSLATE_MANIFEST || path.join(__dirname, 'model-manifest.json')
 const DEFAULT_STORAGE_DIR = process.env.ZADARK_LOCAL_TRANSLATE_STORAGE_DIR || DATA_DIR
 const IDLE_TIMEOUT_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_IDLE_MS || 15 * 60 * 1000)
@@ -25,6 +28,7 @@ const HF_DEFAULT_ENDPOINT = 'https://huggingface.co'
 const RUNTIME_DIR = process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_DIR || path.join(DATA_DIR, 'runtimes')
 const RUNTIME_STATUS_TTL_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_STATUS_TTL_MS || 30 * 1000)
 const GEMMA_NOTICE_PATH = path.join(__dirname, 'GEMMA_NOTICE.txt')
+const OCR_NOTICE_PATH = path.join(__dirname, 'OCR_NOTICE.txt')
 const ZALO_DATA_DIR = process.env.ZADARK_ZALO_DATA_DIR || (
   os.platform() === 'darwin'
     ? path.join(os.homedir(), 'Library', 'Application Support', 'ZaloData')
@@ -42,8 +46,27 @@ const state = {
 const installs = new Map()
 const translationCache = new Map()
 const runtimeStatusCache = new Map()
+const ocrInstalls = new Map()
+const ocrCache = new Map()
 let streamQueue = Promise.resolve()
 let streamQueueDepth = 0
+let ocrQueue = Promise.resolve()
+let ocrQueueDepth = 0
+
+const OCR_LANGUAGES = [
+  {
+    code: 'eng',
+    bytes: 4113088,
+    sha256: '7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2'
+  },
+  {
+    code: 'vie',
+    bytes: 531275,
+    sha256: '79df64caf7bcfb2a27df5042ecb6121e196eada34da774956995747636d5bfa1'
+  }
+]
+const OCR_DATA_REVISION = '87416418657359cb625c412a48b6e1d6d41c29bd'
+const OCR_DOWNLOAD_BYTES = OCR_LANGUAGES.reduce((total, language) => total + language.bytes, 0)
 
 function isAllowedOrigin (origin) {
   if (!origin || origin === 'null' || origin.startsWith('file://')) return true
@@ -183,6 +206,210 @@ function resolveLocalMedia (body, zaloDataDir = ZALO_DATA_DIR) {
     preferred: candidates[0] || null,
     candidates
   }
+}
+
+function ocrDataDir (storagePath) {
+  return path.join(storageRoot(storagePath), 'ocr', 'tessdata-fast')
+}
+
+function ocrLanguagePath (language, storagePath) {
+  return path.join(ocrDataDir(storagePath), `${language.code}.traineddata`)
+}
+
+function ocrLanguageInstalled (language, storagePath) {
+  const filePath = ocrLanguagePath(language, storagePath)
+  if (!fs.existsSync(filePath)) return false
+  return fs.statSync(filePath).size === language.bytes
+}
+
+function ocrRuntimeAvailable () {
+  try {
+    require.resolve('tesseract.js')
+    return true
+  } catch (error) {
+    return false
+  }
+}
+
+function ocrInstallKey (storagePath) {
+  return storageRoot(storagePath)
+}
+
+function ocrStatus (storagePath) {
+  const root = storageRoot(storagePath)
+  const install = ocrInstalls.get(ocrInstallKey(root))
+  const installed = OCR_LANGUAGES.every((language) => ocrLanguageInstalled(language, root))
+  const usedBytes = OCR_LANGUAGES.reduce((total, language) => {
+    const filePath = ocrLanguagePath(language, root)
+    return total + (fs.existsSync(filePath) ? fs.statSync(filePath).size : 0)
+  }, 0)
+
+  return {
+    installed,
+    installing: !!install,
+    installProgress: install ? install.progress : null,
+    runtimeAvailable: ocrRuntimeAvailable(),
+    languages: OCR_LANGUAGES.map((language) => language.code),
+    downloadEstimatedBytes: OCR_DOWNLOAD_BYTES,
+    usedBytes,
+    storagePath: root,
+    dataPath: ocrDataDir(root),
+    disk: getDiskInfo(root, Math.max(0, OCR_DOWNLOAD_BYTES - usedBytes))
+  }
+}
+
+function ocrLanguageUrl (language) {
+  const baseUrl = process.env.ZADARK_OCR_DATA_BASE_URL ||
+    `https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/${OCR_DATA_REVISION}`
+  return `${baseUrl.replace(/\/$/, '')}/${language.code}.traineddata`
+}
+
+async function installOcrData (storagePath) {
+  const root = storageRoot(storagePath)
+  const key = ocrInstallKey(root)
+  const existing = ocrInstalls.get(key)
+  if (existing) return existing.promise
+
+  const install = {
+    progress: {
+      downloadedBytes: 0,
+      totalBytes: OCR_DOWNLOAD_BYTES,
+      percent: 0
+    }
+  }
+
+  install.promise = (async () => {
+    for (const language of OCR_LANGUAGES) {
+      if (ocrLanguageInstalled(language, root)) {
+        install.progress.downloadedBytes += language.bytes
+        continue
+      }
+
+      await downloadFile(
+        ocrLanguageUrl(language),
+        ocrLanguagePath(language, root),
+        process.env.ZADARK_LOCAL_OCR_MOCK === '1' ? '' : language.sha256,
+        (chunkBytes) => {
+          install.progress.downloadedBytes += chunkBytes
+          install.progress.percent = Math.min(
+            100,
+            Math.round((install.progress.downloadedBytes / OCR_DOWNLOAD_BYTES) * 100)
+          )
+        }
+      )
+    }
+
+    install.progress.percent = 100
+    if (fs.existsSync(OCR_NOTICE_PATH)) {
+      fs.copyFileSync(OCR_NOTICE_PATH, path.join(ocrDataDir(root), 'OCR_NOTICE.txt'))
+    }
+    return {
+      ...ocrStatus(root),
+      installing: false,
+      installProgress: null
+    }
+  })().finally(() => {
+    ocrInstalls.delete(key)
+  })
+
+  ocrInstalls.set(key, install)
+  return install.promise
+}
+
+function deleteOcrData (storagePath) {
+  const root = storageRoot(storagePath)
+  if (ocrInstalls.has(ocrInstallKey(root))) {
+    const error = new Error('OCR data is still downloading')
+    error.statusCode = 409
+    throw error
+  }
+  fs.rmSync(path.join(root, 'ocr'), { recursive: true, force: true })
+  ocrCache.clear()
+  return ocrStatus(root)
+}
+
+function setCachedOcr (key, value) {
+  ocrCache.delete(key)
+  ocrCache.set(key, value)
+  while (ocrCache.size > OCR_CACHE_LIMIT) {
+    ocrCache.delete(ocrCache.keys().next().value)
+  }
+}
+
+function enqueueOcr (task) {
+  if (ocrQueueDepth >= OCR_QUEUE_LIMIT) {
+    const error = new Error('Too many OCR requests')
+    error.statusCode = 429
+    throw error
+  }
+
+  ocrQueueDepth += 1
+  const result = ocrQueue.then(task, task)
+  ocrQueue = result.catch(() => {})
+  return result.finally(() => {
+    ocrQueueDepth -= 1
+  })
+}
+
+async function recognizeLocalImage (body) {
+  const status = ocrStatus(body.storagePath)
+  if (!status.runtimeAvailable) {
+    const error = new Error('OCR runtime is not available')
+    error.statusCode = 503
+    throw error
+  }
+  if (!status.installed && process.env.ZADARK_LOCAL_OCR_MOCK !== '1') {
+    const error = new Error('OCR data is not installed')
+    error.statusCode = 409
+    throw error
+  }
+
+  const resolved = resolveLocalMedia({ ...body, type: 'image' })
+  const image = resolved.candidates.find((candidate) => candidate.mime === 'image/jpeg')
+  if (!image) {
+    const error = new Error('No OCR-compatible cached image is available')
+    error.statusCode = 415
+    throw error
+  }
+  if (image.bytes > MAX_OCR_IMAGE_BYTES) {
+    const error = new Error('Image is too large for OCR')
+    error.statusCode = 413
+    throw error
+  }
+
+  const stat = fs.statSync(image.path)
+  const cacheKey = `${image.path}:${stat.size}:${stat.mtimeMs}`
+  const cached = ocrCache.get(cacheKey)
+  if (cached) return { ...cached, cached: true }
+
+  return enqueueOcr(async () => {
+    if (process.env.ZADARK_LOCAL_OCR_MOCK === '1') {
+      const result = { success: true, text: '[OCR] test image', confidence: 100, image }
+      setCachedOcr(cacheKey, result)
+      return result
+    }
+
+    const { createWorker } = require('tesseract.js')
+    const worker = await createWorker(OCR_LANGUAGES.map((language) => language.code), 1, {
+      langPath: status.dataPath,
+      cacheMethod: 'none',
+      gzip: false
+    })
+
+    try {
+      const recognition = await worker.recognize(image.path)
+      const result = {
+        success: true,
+        text: String(recognition.data.text || '').trim(),
+        confidence: Math.round(recognition.data.confidence || 0),
+        image
+      }
+      setCachedOcr(cacheKey, result)
+      return result
+    } finally {
+      await worker.terminate()
+    }
+  })
 }
 
 function loadManifest () {
@@ -1377,6 +1604,25 @@ async function route (req, res) {
       return json(req, res, result.found ? 200 : 404, { success: result.found, ...result })
     }
 
+    if (req.method === 'GET' && url.pathname === '/v1/local-ocr/status') {
+      return json(req, res, 200, ocrStatus(url.searchParams.get('storagePath') || DEFAULT_STORAGE_DIR))
+    }
+
+    if (req.method === 'POST' && url.pathname === '/v1/local-ocr/install') {
+      const body = await readJsonBody(req)
+      return json(req, res, 200, { success: true, ...(await installOcrData(body.storagePath)) })
+    }
+
+    if (req.method === 'POST' && url.pathname === '/v1/local-ocr/delete') {
+      const body = await readJsonBody(req)
+      return json(req, res, 200, { success: true, ...deleteOcrData(body.storagePath) })
+    }
+
+    if (req.method === 'POST' && url.pathname === '/v1/ocr') {
+      const body = await readJsonBody(req)
+      return json(req, res, 200, await recognizeLocalImage(body))
+    }
+
     if (req.method === 'POST' && url.pathname === '/v1/local-translate/install') {
       const body = await readJsonBody(req)
       const variant = selectVariant(manifest, body.variantId)
@@ -1483,6 +1729,8 @@ module.exports = {
   streamRuntimeWithRetry,
   resolveRuntimeCommand,
   resolveLocalMedia,
+  recognizeLocalImage,
+  ocrStatus,
   route,
   runtimeStatus,
   selectVariant,

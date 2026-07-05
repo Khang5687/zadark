@@ -234,18 +234,31 @@ Current context behavior:
 Important caveat: context is heuristic. It can help disambiguate, but it is not
 guaranteed. It should not be described to users as "learning" or "indexing".
 
-### Deferred Media AI Roadmap
+### Media AI
 
-ZaDark should not add voice/image AI to the first local translation release.
-Current media handling stays text-only: captions and short placeholders.
+ZaDark now supports explicit, local OCR for image messages:
 
-Research verdict for a later version:
+- Hovering a cached Zalo image exposes a "translate image text" action.
+- The frontend derives the conversation and message IDs from Zalo's image
+  metadata, then calls the local backend.
+- `POST /v1/ocr` resolves the full cached JPEG, runs Tesseract.js with English
+  and Vietnamese data, and passes the recognized text through the existing
+  contextual TranslateGemma stream.
+- The Tesseract.js runtime adds about 25 MB to the ZaDark PC build.
+- English and Vietnamese `tessdata_fast` files are downloaded on first use,
+  checksum-verified, and consume about 4.6 MB.
+- OCR results are cached in memory by file path, size, and modification time.
+- OCR work is serialized and capped; no media is scanned in the background.
+- Settings show OCR installation size and provide a separate "Delete OCR"
+  action.
+
+WhatRust should preserve the product behavior but use its native attachment
+API instead of ZaDark's filesystem resolver.
+
+Research verdict for later media features:
 
 - Use separate specialized optional packs, not one large unified multimodal
   model.
-- OCR should come before general image captioning. First candidate:
-  Tesseract 5 plus Vietnamese traineddata, downloaded only if the user enables
-  image text translation.
 - Voice should be a separate explicit action. First candidate: whisper.cpp plus
   a quantized Whisper large-v3-turbo model. PhoWhisper can be considered later
   as a Vietnamese-enhanced pack if testing shows normal Whisper is weak.
@@ -515,7 +528,7 @@ Goal: release confidence.
 
 Recent checks that have passed during this work:
 
-- `npm test`: 54 tests passing.
+- `npm test`: 59 tests passing.
 - `node src/pc/local-translate/backend.js --self-check`: passing.
 - `standard` on touched JS files: passing.
 - `npm run build`: passing, with an existing Node `fs.Stats` deprecation warning.
@@ -541,6 +554,9 @@ Recent checks that have passed during this work:
   emitted startup metadata, incremental Vietnamese token deltas, and a complete
   reconciled result. A repeated request returned the cached result without
   regeneration.
+- Real OCR against the cached My Documents test image returned readable English
+  text with 92% confidence. The same image resolved from Zalo's cache as a full
+  JPEG, and a repeat OCR request hit the in-memory cache.
 
 ## Known ZaDark Rough Edges
 
@@ -552,8 +568,8 @@ Recent checks that have passed during this work:
 - Context improves disambiguation only heuristically and only for messages
   currently visible or already seen during this app session.
 - Voice messages are placeholders only; local ASR is intentionally deferred.
-- Image understanding is deferred; current image handling is caption text or a
-  placeholder.
+- OCR handles text in cached JPEG images. General image understanding,
+  handwriting-specialized OCR, and visual captioning remain deferred.
 - MLX support is present as an option but llama.cpp Metal is the practical
   baseline.
 - Windows GPU support is intentionally deferred.

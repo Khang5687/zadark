@@ -28,6 +28,17 @@ const getWebPath = (p) => path.join(WEB_PATH, p)
 const getPCPath = (p) => path.join(PC_PATH, p)
 
 const SAFARI_RESOURCES = getWebPath('./vendor/safari/ZaDark Extension/Resources')
+const OCR_RUNTIME_PACKAGES = [
+  'bmp-js',
+  'idb-keyval',
+  'is-url',
+  'node-fetch',
+  'opencollective-postinstall',
+  'regenerator-runtime',
+  'tesseract.js',
+  'wasm-feature-detect',
+  'zlibjs'
+]
 
 const isDevelopment = process.env.NODE_ENV === 'development'
 
@@ -204,6 +215,14 @@ const buildPC = () => {
 
     src(getCorePath('./fonts/**/*')).pipe(dest('./build/pc/assets/fonts')),
     src(getCorePath('./images/**/*')).pipe(dest('./build/pc/assets/images')),
+    src([
+      ...OCR_RUNTIME_PACKAGES.map((name) => `./node_modules/${name}/**/*`),
+      './node_modules/tesseract.js-core/{LICENSE,index.js,package.json}',
+      './node_modules/tesseract.js-core/tesseract-core*-lstm.js',
+      './node_modules/tesseract.js-core/tesseract-core*-lstm.wasm',
+      './node_modules/tesseract.js-core/{tesseract-core,tesseract-core-simd,tesseract-core-relaxedsimd}.js',
+      './node_modules/tesseract.js-core/{tesseract-core,tesseract-core-simd,tesseract-core-relaxedsimd}.wasm'
+    ], { base: './node_modules' }).pipe(dest('./build/pc/local-translate/node_modules')),
     buildSass(getPCPath('./assets/scss/*.scss'), './build/pc/assets/css')
   )
 }

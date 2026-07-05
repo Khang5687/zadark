@@ -1341,6 +1341,8 @@
   const localTranslateSidebarProgressFillElName = '#js-local-translate-sidebar-progress-fill'
   const inputLocalTranslateStoragePathElName = '#js-input-local-translate-storage-path'
   const buttonDeleteLocalTranslateModelElName = '#js-button-delete-local-translate-model'
+  const localOcrStatusElName = '#js-local-ocr-status'
+  const buttonDeleteLocalOcrElName = '#js-button-delete-local-ocr'
   const inputThreadChatBgElName = '#js-input-thread-chat-bg'
   const buttonDelThreadChatBgElName = '#js-button-del-thread-chat-bg'
 
@@ -1439,7 +1441,10 @@
   }
 
   const formatLocalTranslateBytes = (bytes) => {
-    if (!bytes) return '0 GB'
+    if (!bytes) return '0 MB'
+    if (bytes < 1024 * 1024 * 1024) {
+      return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+    }
     return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
   }
 
@@ -1469,6 +1474,30 @@
     if (!res.ok || !json.success) {
       throw new Error(json.message || 'Không thể xoá model dịch')
     }
+    return json
+  }
+
+  const getLocalOcrStatus = async () => {
+    const storagePath = ZaDarkStorage.getLocalTranslateStoragePath()
+    const query = storagePath ? `?storagePath=${encodeURIComponent(storagePath)}` : ''
+    const res = await fetch(`${getLocalTranslateApiUrl()}/local-ocr/status${query}`)
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.message || 'Không thể kiểm tra OCR')
+    return json
+  }
+
+  const deleteLocalOcr = async () => {
+    const res = await fetch(`${getLocalTranslateApiUrl()}/local-ocr/delete`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        storagePath: ZaDarkStorage.getLocalTranslateStoragePath()
+      })
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) throw new Error(json.message || 'Không thể xoá OCR')
     return json
   }
 
@@ -1608,6 +1637,14 @@
 
           <div class="font-settings font-settings--compact">
             <progress id="js-local-translate-progress" class="zadark-local-translate-progress" max="100" value="0" hidden></progress>
+          </div>
+
+          <div class="font-settings font-settings--compact">
+            <label id="js-local-ocr-status" class="font-settings__label font-settings__label--muted" style="flex: 1;">
+              OCR ảnh: đang kiểm tra...
+            </label>
+
+            <button id="js-button-delete-local-ocr" class="btn-del" disabled>Xoá OCR</button>
           </div>
 
           <div class="font-settings font-settings--compact">
@@ -2178,6 +2215,27 @@
       $sidebarProgressFill.css('width', '0%')
       $button.prop('disabled', true)
     }
+
+    const $ocrStatus = $(localOcrStatusElName)
+    const $ocrButton = $(buttonDeleteLocalOcrElName)
+    try {
+      const status = await getLocalOcrStatus()
+      $ocrButton.prop('disabled', !status.installed || status.installing)
+      if (status.installing) {
+        const percent = status.installProgress ? status.installProgress.percent || 0 : 0
+        $ocrStatus.text(`OCR ảnh: đang tải ${percent}%`)
+      } else if (!status.runtimeAvailable) {
+        $ocrStatus.text('OCR ảnh: runtime chưa sẵn sàng')
+      } else if (status.installed) {
+        $ocrStatus.text(`OCR ảnh: đã tải ${formatLocalTranslateBytes(status.usedBytes)}`)
+      } else {
+        $ocrStatus.text(`OCR ảnh: chưa tải (${formatLocalTranslateBytes(status.downloadEstimatedBytes)})`)
+      }
+      $ocrStatus.attr('title', status.dataPath || status.storagePath)
+    } catch (error) {
+      $ocrStatus.text('OCR ảnh: chưa sẵn sàng').attr('title', error.message)
+      $ocrButton.prop('disabled', true)
+    }
   }
 
   const loadLocalTranslateStoragePath = () => {
@@ -2209,6 +2267,24 @@
       $button.prop('disabled', false)
     } finally {
       $button.text('Xoá model')
+    }
+  }
+
+  const handleDeleteLocalOcr = async function () {
+    const $button = $(this)
+    $button.prop('disabled', true).text('Đang xoá...')
+    try {
+      await deleteLocalOcr()
+      ZaDarkUtils.showToast('Đã xoá OCR ảnh')
+      await loadLocalTranslateStatus()
+    } catch (error) {
+      ZaDarkUtils.showToast(error.message, {
+        className: 'toastify--error',
+        duration: 3000
+      })
+      $button.prop('disabled', false)
+    } finally {
+      $button.text('Xoá OCR')
     }
   }
 
@@ -2342,6 +2418,7 @@
     })
 
     $(buttonDeleteLocalTranslateModelElName).on('click', handleDeleteLocalTranslateModel)
+    $(buttonDeleteLocalOcrElName).on('click', handleDeleteLocalOcr)
 
     $(inputThreadChatBgElName).on('click', function (e) {
       const convId = ZaDarkUtils.getCurrentConvId()

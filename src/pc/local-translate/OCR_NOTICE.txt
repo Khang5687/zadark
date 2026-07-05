@@ -1,0 +1,12 @@
+ZaDark optional local OCR pack
+
+The OCR runtime uses Tesseract.js:
+https://github.com/naptha/tesseract.js
+
+The downloaded English and Vietnamese recognition data comes from
+tesseract-ocr/tessdata_fast at revision:
+87416418657359cb625c412a48b6e1d6d41c29bd
+
+Tesseract.js, Tesseract, and tessdata_fast are distributed under the
+Apache License 2.0. Their licenses and notices remain available from their
+upstream repositories and bundled npm package metadata.

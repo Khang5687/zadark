@@ -23,7 +23,10 @@
   }
 
   const formatBytes = (bytes) => {
-    if (!bytes) return '0 GB'
+    if (!bytes) return '0 MB'
+    if (bytes < 1024 * 1024 * 1024) {
+      return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+    }
     return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
   }
 
@@ -264,6 +267,125 @@
     if (!res.ok || !json.success) {
       throw new Error(json.message || 'Không thể tải model AI')
     }
+    return json
+  }
+
+  const getLocalOcrStatus = async () => {
+    const storagePath = getLocalTranslateStoragePath()
+    const query = storagePath ? `?storagePath=${encodeURIComponent(storagePath)}` : ''
+    const res = await fetch(getTranslateApiURL() + '/local-ocr/status' + query)
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.message || 'Không thể kiểm tra OCR')
+    return json
+  }
+
+  const installLocalOcr = async () => {
+    const res = await fetch(getTranslateApiURL() + '/local-ocr/install', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(localTranslateStoragePayload())
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) throw new Error(json.message || 'Không thể tải OCR')
+    return json
+  }
+
+  const showLocalOcrSetup = (status) => {
+    return new Promise((resolve) => {
+      const canInstall = status.runtimeAvailable && status.disk && status.disk.fits !== false
+      const $dialog = $(`
+        <div class="zadark-local-translate-dialog">
+          <div class="zadark-local-translate-dialog__box">
+            <div class="zadark-local-translate-dialog__title">Dịch chữ trong ảnh</div>
+            <div class="zadark-local-translate-dialog__text">
+              ZaDark cần tải bộ nhận dạng chữ Anh và Việt khoảng <strong>${formatBytes(status.downloadEstimatedBytes)}</strong>. Dữ liệu ảnh chỉ được xử lý trên máy của bạn.
+            </div>
+            <div class="zadark-local-translate-dialog__error"></div>
+            <div class="zadark-local-translate-dialog__actions">
+              <button type="button" class="zadark-local-translate-dialog__button" data-action="cancel">Huỷ</button>
+              <button type="button" class="zadark-local-translate-dialog__button zadark-local-translate-dialog__button--primary" data-action="install" ${canInstall ? '' : 'disabled'}>Tải và tiếp tục</button>
+            </div>
+          </div>
+        </div>
+      `)
+      const $error = $dialog.find('.zadark-local-translate-dialog__error')
+      const finish = (value) => {
+        $dialog.remove()
+        resolve(value)
+      }
+
+      if (!status.runtimeAvailable) {
+        $error.text('Bản ZaDark này chưa có runtime OCR.')
+      } else if (status.disk && status.disk.fits === false) {
+        $error.text('Ổ đĩa không đủ dung lượng trống.')
+      }
+
+      $dialog.on('click', '[data-action="cancel"]', () => finish(false))
+      $dialog.on('click', '[data-action="install"]', async function () {
+        const $button = $(this)
+        $button.prop('disabled', true).text('Đang tải...')
+        $dialog.find('[data-action="cancel"]').prop('disabled', true)
+        try {
+          await installLocalOcr()
+          finish(true)
+        } catch (error) {
+          $button.prop('disabled', false).text('Thử lại')
+          $dialog.find('[data-action="cancel"]').prop('disabled', false)
+          $error.text(error.message)
+        }
+      })
+
+      $('body').append($dialog)
+    })
+  }
+
+  const ensureLocalOcrReady = async () => {
+    const status = await getLocalOcrStatus()
+    if (status.installed) return true
+    if (status.installing) throw new Error('ZaDark đang tải bộ OCR')
+    return showLocalOcrSetup(status)
+  }
+
+  const parseImageIdentity = (imageEl) => {
+    if (!imageEl) return null
+
+    const idMatch = String(imageEl.id || '').match(/^img-(\d+)\.\d+\.(g?\d+)-/)
+    if (idMatch) {
+      return {
+        messageId: idMatch[1],
+        conversationId: idMatch[2]
+      }
+    }
+
+    let pathname = ''
+    try {
+      pathname = new URL(imageEl.currentSrc || imageEl.src || '').pathname
+    } catch (error) {}
+    const fileName = decodeURIComponent(pathname).split('/').pop() || ''
+    const pathMatch = fileName.match(/^(\d+)_\d+_(g?\d+)(?:_|$)/)
+    return pathMatch
+      ? { messageId: pathMatch[1], conversationId: pathMatch[2] }
+      : null
+  }
+
+  const recognizeLocalImage = async (identity) => {
+    const ready = await ensureLocalOcrReady()
+    if (!ready) return null
+
+    const res = await fetch(getTranslateApiURL() + '/ocr', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        ...identity,
+        ...localTranslateStoragePayload()
+      })
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) throw new Error(json.message || 'Không thể nhận dạng chữ trong ảnh')
     return json
   }
 
@@ -540,7 +662,7 @@
    * @param {string} translateTarget Language to be translated into.
    * @returns
    */
-  const addTranslateListener = ($buttonWrapper, $resultWrapper, $text, translateTarget) => {
+  const addTranslateListener = ($buttonWrapper, $resultWrapper, $text, translateTarget, imageIdentity = null) => {
     if ($buttonWrapper.find('.zadark-translate-msg__button').length) {
       return
     }
@@ -548,7 +670,7 @@
     const text = normalizeTranslateText($text ? $text.text() : '')
 
     // Skip if the text is empty
-    if (!text) {
+    if (!text && !imageIdentity) {
       return
     }
 
@@ -559,6 +681,10 @@
 
     const $button = $('<button>')
       .addClass('zadark-translate-msg__button')
+      .toggleClass('zadark-translate-msg__button--image', !!imageIdentity)
+      .attr('type', 'button')
+      .attr('title', imageIdentity ? 'Dịch chữ trong ảnh' : 'Dịch tin nhắn')
+      .attr('aria-label', imageIdentity ? 'Dịch chữ trong ảnh' : 'Dịch tin nhắn')
       .html('<i class="zadark-icon zadark-icon--translate"></i>')
 
     $button.on('click', function (e) {
@@ -635,11 +761,26 @@
       }
 
       ;(async () => {
-        const context = collectLocalTranslateContext($buttonWrapper[0], text)
+        let sourceText = text
+        if (imageIdentity) {
+          setTitle('Đang nhận dạng chữ...')
+          const ocr = await recognizeLocalImage(imageIdentity)
+          if (!ocr) {
+            $nextTranslation.remove()
+            return
+          }
+          sourceText = normalizeTranslateText(ocr.text)
+          if (!sourceText) {
+            setTitle('Không tìm thấy chữ trong ảnh')
+            return
+          }
+        }
+
+        const context = collectLocalTranslateContext($buttonWrapper[0], sourceText)
         let result
 
         if (supportsStreaming) {
-          result = await streamLocalTranslate(text, translateTarget, context, controller.signal, (event) => {
+          result = await streamLocalTranslate(sourceText, translateTarget, context, controller.signal, (event) => {
             if (event.type === 'state' && event.state === 'queued') setTitle('Đang chờ dịch...')
             if (event.type === 'state' && event.state === 'starting') setTitle('Đang khởi động model...')
             if (event.type === 'delta') {
@@ -648,9 +789,9 @@
               flushSoon()
             }
           })
-          if (result === null) result = await translate(text, translateTarget, context)
+          if (result === null) result = await translate(sourceText, translateTarget, context)
         } else {
-          result = await translate(text, translateTarget, context)
+          result = await translate(sourceText, translateTarget, context)
         }
 
         if (!isCurrent()) return
@@ -697,6 +838,20 @@
 
         addTranslateListener($card, $content, $text, translateTarget)
       })
+
+      if (isLocalTranslate()) {
+        $(this).on('mouseenter.zadark-translate-msg', 'img.zimg-el[data-z-element-type="image"]', function () {
+          const identity = parseImageIdentity(this)
+          if (!identity) return
+
+          const $image = $(this)
+          const $message = $image.closest('.chatImageMessage,.chatImageMessage--audit')
+          if (!$message.length) return
+
+          const $anchor = $image.parent().addClass('zadark-ocr-image-anchor')
+          addTranslateListener($anchor, $message, null, translateTarget, identity)
+        })
+      }
     })
   }
 
@@ -715,6 +870,7 @@
     contextItemFromElement,
     formatContextItem,
     createNdjsonParser,
+    parseImageIdentity,
     localTranslateNotReadyResult,
     rememberContextItems,
     reset: () => contextMemory.clear()

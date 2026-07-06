@@ -836,6 +836,19 @@ function copyGemmaNotice (variant, storagePath) {
   fs.copyFileSync(GEMMA_NOTICE_PATH, path.join(targetDir, 'GEMMA_NOTICE.txt'))
 }
 
+function recordGemmaAcceptance (variant, storagePath) {
+  if (!usesGemmaTerms(variant)) return
+  const targetDir = modelDirFor(variant, storagePath)
+  fs.mkdirSync(targetDir, { recursive: true })
+  fs.writeFileSync(path.join(targetDir, 'gemma-terms-acceptance.json'), JSON.stringify({
+    acceptedAt: new Date().toISOString(),
+    termsUrl: 'https://ai.google.dev/gemma/terms',
+    prohibitedUsePolicyUrl: 'https://ai.google.dev/gemma/prohibited_use_policy',
+    model: variant.model,
+    modelArtifact: variant.modelStorageId || variant.id
+  }, null, 2))
+}
+
 function installKey (variant, storagePath) {
   return `${variant.id}:${storageRoot(storagePath)}`
 }
@@ -1164,7 +1177,8 @@ async function installVariant (variant, storagePath) {
   const existing = installs.get(key)
   if (existing) return existing.promise
 
-  const disk = getDiskInfo(root, (variant.estimatedBytes || 0) + (variant.runtimeEstimatedBytes || 0))
+  const expectedBytes = variantStatus(variant, root).downloadEstimatedBytes
+  const disk = getDiskInfo(root, expectedBytes)
   if (disk.available && disk.fits === false) {
     throw new Error('Not enough disk space for model')
   }
@@ -1172,7 +1186,7 @@ async function installVariant (variant, storagePath) {
   const progress = {
     running: true,
     downloadedBytes: 0,
-    totalBytes: variant.estimatedBytes || 0,
+    totalBytes: expectedBytes,
     percent: 0,
     file: ''
   }
@@ -1180,13 +1194,15 @@ async function installVariant (variant, storagePath) {
 
   const updateProgress = (downloadedBytes, totalBytes, file) => {
     progress.downloadedBytes = previousBytes + downloadedBytes
-    progress.totalBytes = (variant.runtimeEstimatedBytes || 0) + (variant.estimatedBytes || 0) || totalBytes || progress.totalBytes
+    progress.totalBytes = expectedBytes || totalBytes || progress.totalBytes
     progress.percent = progress.totalBytes ? Number(((progress.downloadedBytes / progress.totalBytes) * 100).toFixed(1)) : 0
     progress.file = file || progress.file
   }
 
   const promise = installRuntimeVariant(variant, updateProgress).then((runtimeResult) => {
-    previousBytes = runtimeResult ? variant.runtimeEstimatedBytes || runtimeResult.bytes || previousBytes : 0
+    previousBytes = runtimeResult && !runtimeResult.alreadyInstalled
+      ? variant.runtimeEstimatedBytes || runtimeResult.bytes || previousBytes
+      : 0
     return runInstallVariant(variant, root, updateProgress)
   }).then((modelResult) => {
     copyGemmaNotice(variant, root)
@@ -2077,6 +2093,7 @@ async function route (req, res) {
         return json(req, res, 400, { success: false, message: 'Gemma terms must be accepted before download' })
       }
       const result = await installVariant(variant, body.storagePath)
+      recordGemmaAcceptance(variant, body.storagePath)
       return json(req, res, 200, { success: true, variant: variant.id, ...result })
     }
 
@@ -2202,6 +2219,7 @@ module.exports = {
   resolveRuntimeCommand,
   resolveLocalMedia,
   recognizeLocalImage,
+  recordGemmaAcceptance,
   ocrStatus,
   parseFootnotes,
   route,

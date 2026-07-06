@@ -1080,6 +1080,23 @@ describe('local translate backend', () => {
     expect(result.body.message).toBe('Gemma terms must be accepted before download')
   })
 
+  it('records Gemma acceptance beside the installed model', () => {
+    const storagePath = path.join(tempDir, 'gemma-acceptance')
+    backend.recordGemmaAcceptance({
+      id: 'gemma-acceptance-test',
+      model: 'translategemma-4b-it',
+      modelStorageId: 'translategemma-4b-it-test'
+    }, storagePath)
+    const acceptance = JSON.parse(fs.readFileSync(path.join(
+      storagePath,
+      'models',
+      'translategemma-4b-it-test',
+      'gemma-terms-acceptance.json'
+    )))
+    expect(acceptance.termsUrl).toBe('https://ai.google.dev/gemma/terms')
+    expect(acceptance.model).toBe('translategemma-4b-it')
+  })
+
   it('downloads Hugging Face snapshot variants without external tools', async () => {
     const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
     process.env.ZADARK_HF_ENDPOINT = hfBaseUrl

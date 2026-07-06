@@ -22,6 +22,10 @@ The latest model/provider work is split into atomic commits:
 - `09baa32 feat(pc): add local translation model manager`
 - `646eac9 feat(pc): add secure cloud translation providers`
 - `c73b170 feat(pc): add translation engine settings`
+- `42108f2 feat: choose model during local translation setup`
+- `5bb488c refactor: share models across local runtimes`
+- `89b2e95 feat: select bundled Windows GPU runtimes`
+- `91c60b0 feat: manage local translation acceleration`
 
 ## Purpose
 
@@ -179,7 +183,9 @@ Current runtime baseline:
 - llama.cpp release: `b9867`.
 - Apple Silicon: official llama.cpp Metal archive.
 - Intel macOS: official llama.cpp CPU archive.
-- Windows x64: official llama.cpp CPU zip archive.
+- Windows x64: official llama.cpp CUDA 12.4, Vulkan, or CPU zip selected from
+  detected hardware. CUDA requires an NVIDIA driver new enough for CUDA 12, not
+  a separately installed CUDA Toolkit. Accelerated bundles retain CPU fallback.
 - Linux x64: official llama.cpp CPU archive.
 - MLX is considered on Apple Silicon, but llama.cpp Metal is the reliable
   bundled/downloaded baseline.
@@ -190,11 +196,16 @@ Known artifact checksums live in `src/pc/local-translate/model-manifest.json`.
 
 Default ZaDark storage:
 
-- `~/.zadark/local-translate/models/<variant-id>/...`
+- `~/.zadark/local-translate/models/<model-artifact-id>/...`
 - `~/.zadark/local-translate/runtimes/...`
 - `~/.zadark/local-translate/runtimes/.downloads/...`
 
 Users can override model storage path from settings.
+
+Model artifacts are shared across CPU/Vulkan/CUDA variants. Legacy per-variant
+directories are moved in place on first access, avoiding a multi-gigabyte copy
+or redownload. Runtime archives extract into isolated backend directories so
+overlapping DLL names cannot overwrite another backend.
 
 For WhatRust, prefer Tauri app-data/cache APIs instead of hardcoded dotdirs:
 
@@ -601,7 +612,7 @@ Goal: release confidence.
 
 Recent checks that have passed during this work:
 
-- `npm test`: 75 tests passing.
+- `npm test`: 87 tests passing after the hardware/runtime work in this handoff.
 - `node src/pc/local-translate/backend.js --self-check`: passing.
 - `standard` on touched JS files: passing.
 - `npm run build`: passing, with an existing Node `fs.Stats` deprecation warning.
@@ -637,6 +648,10 @@ Recent checks that have passed during this work:
   starts, defaults to TranslateGemma 4B, exposes 4B/12B model choices, lists
   exactly OpenAI/Groq/xAI/Mistral/OpenRouter/Custom, and never returns API key
   fields to the renderer.
+- Windows runtime selection now has non-UI coverage for CUDA 12 driver gating,
+  old-NVIDIA/AMD/Intel Vulkan selection, CPU fallback, isolated multi-archive
+  extraction, accelerator cleanup, and manual Auto/CPU/Vulkan modes. Real
+  Windows hardware verification is still required before release.
 
 ### Vietnamese model benchmark
 
@@ -655,7 +670,8 @@ WebView memory on its supported hardware.
 
 ## Known ZaDark Rough Edges
 
-- Legal compliance is not done. The current checkbox/notice is not a substitute
+- Legal compliance is not done. The checkbox now records acceptance timestamp,
+  model artifact, and policy URLs beside the model, but that is not a substitute
   for release legal review.
 - Model storage is about 2.4 GB for 4B or 7.3 GB for the high-memory 12B option.
 - Source auto-detection is prompt/model-driven, not a deterministic language ID
@@ -667,7 +683,8 @@ WebView memory on its supported hardware.
   handwriting-specialized OCR, and visual captioning remain deferred.
 - MLX support is present as an option but llama.cpp Metal is the practical
   baseline.
-- Windows GPU support is intentionally deferred.
+- Windows CUDA/Vulkan bundles are implemented but have not yet been exercised on
+  physical NVIDIA, AMD, and Intel Windows machines.
 - The install endpoint's long-running request is used to start background
   download; the backend continues work while UI closes, but a Rust app should
   model this as an explicit background task/state machine.
@@ -676,15 +693,16 @@ WebView memory on its supported hardware.
 
 ## Open Questions For ZaDark Before Finalizing This Feature
 
-- Should terms acceptance be persisted with version/date, not just sent per
-  install request?
+- What immutable Gemma agreement revision identifier should supplement the
+  stored acceptance timestamp and policy URLs?
 - Should the app provide a full copy of the Gemma agreement, not only links and
   notice?
 - Should install errors after the dialog closes surface as a toast/notification?
 - Should downloads support resume, or just safe retry from scratch?
 - Should there be a cancel download action?
 - What are measured cold-start, warm latency, and RAM usage on each platform?
-- Should Windows GPU runtimes be added after launch fallback exists?
+- Which Windows hardware/driver matrix must pass before GPU selection is enabled
+  in a public release?
 - Should source-language detection use a small deterministic detector before
   prompting TranslateGemma?
 - Should WhatRust use the same model at all, or select a more permissive model

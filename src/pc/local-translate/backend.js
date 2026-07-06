@@ -508,9 +508,9 @@ function runtimeArtifactPathFor (variant) {
     .find((candidate) => candidate.includes('/') || candidate.includes('\\')) || ''
 }
 
-function runtimeArchivePathFor (variant) {
-  const urlPath = variant.runtimeArchiveUrl ? new URL(variant.runtimeArchiveUrl).pathname : ''
-  const name = path.basename(urlPath) || `${variant.id}-runtime.tar`
+function runtimeArchivePathFor (variant, artifact = variant) {
+  const urlPath = artifact.url ? new URL(artifact.url).pathname : (variant.runtimeArchiveUrl ? new URL(variant.runtimeArchiveUrl).pathname : '')
+  const name = path.basename(urlPath) || `${variant.runtimeId || variant.id}-runtime.tar`
   return path.join(RUNTIME_DIR, '.downloads', name)
 }
 
@@ -527,8 +527,8 @@ function resolveRuntimeCommand (variant) {
   return ''
 }
 
-function validateArchiveEntries (entries) {
-  const root = path.resolve(RUNTIME_DIR)
+function validateArchiveEntries (entries, destination = RUNTIME_DIR) {
+  const root = path.resolve(destination)
   entries.forEach((entry) => {
     const target = path.resolve(root, entry)
     if (path.isAbsolute(entry) || (target !== root && !target.startsWith(root + path.sep))) {
@@ -561,16 +561,16 @@ function archiveEntriesWithTool (archivePath) {
   throw new Error('Runtime archive extractor is not available')
 }
 
-function extractRuntimeArchive (archivePath) {
+function extractRuntimeArchive (archivePath, destination = RUNTIME_DIR) {
   const archive = archiveEntriesWithTool(archivePath)
-  validateArchiveEntries(archive.entries)
-  fs.mkdirSync(RUNTIME_DIR, { recursive: true })
+  validateArchiveEntries(archive.entries, destination)
+  fs.mkdirSync(destination, { recursive: true })
   if (archive.tool === 'tar') {
-    childProcess.execFileSync('tar', ['-xf', archivePath, '-C', RUNTIME_DIR], { stdio: 'ignore' })
+    childProcess.execFileSync('tar', ['-xf', archivePath, '-C', destination], { stdio: 'ignore' })
     return
   }
 
-  childProcess.execFileSync('unzip', ['-oq', archivePath, '-d', RUNTIME_DIR], { stdio: 'ignore' })
+  childProcess.execFileSync('unzip', ['-oq', archivePath, '-d', destination], { stdio: 'ignore' })
 }
 
 function runtimeStatusCacheKey (variant) {
@@ -704,7 +704,16 @@ function storageRoot (storagePath) {
 }
 
 function modelDirFor (variant, storagePath) {
-  return path.join(storageRoot(storagePath), 'models', variant.id)
+  return path.join(storageRoot(storagePath), 'models', variant.modelStorageId || variant.id)
+}
+
+function migrateLegacyModel (variant, storagePath) {
+  if (!variant.modelStorageId || variant.modelStorageId === variant.id) return
+  const target = modelDirFor(variant, storagePath)
+  const legacy = path.join(storageRoot(storagePath), 'models', variant.id)
+  if (fs.existsSync(target) || !fs.existsSync(legacy)) return
+  fs.mkdirSync(path.dirname(target), { recursive: true })
+  fs.renameSync(legacy, target)
 }
 
 function modelPathFor (variant, storagePath) {
@@ -772,6 +781,7 @@ function isVariantRunning (variant, storagePath) {
 
 function variantStatus (variant, storagePath) {
   const root = storageRoot(storagePath)
+  migrateLegacyModel(variant, root)
   const modelPath = modelPathFor(variant, root)
   const modelDir = modelDirFor(variant, root)
   const estimatedBytes = variant.estimatedBytes || 0
@@ -809,7 +819,9 @@ function variantStatus (variant, storagePath) {
 }
 
 function isRuntimeDownloadable (variant) {
-  return (!!variant.runtimeUrl && !!runtimeArtifactPathFor(variant)) || !!variant.runtimeArchiveUrl
+  return (!!variant.runtimeUrl && !!runtimeArtifactPathFor(variant)) ||
+    !!variant.runtimeArchiveUrl ||
+    (Array.isArray(variant.runtimeArchives) && variant.runtimeArchives.length > 0)
 }
 
 function hfEndpoint () {
@@ -967,6 +979,7 @@ async function downloadHuggingFaceSnapshot (variant, storagePath, onProgress) {
 }
 
 async function runInstallVariant (variant, storagePath, onProgress) {
+  migrateLegacyModel(variant, storagePath)
   if (variant.downloadKind === 'hf-snapshot') {
     return downloadHuggingFaceSnapshot(variant, storagePath, onProgress)
   }
@@ -988,6 +1001,32 @@ async function runInstallVariant (variant, storagePath, onProgress) {
 async function installRuntimeVariant (variant, onProgress) {
   const runtime = runtimeStatus(variant)
   if (runtime.available) return { path: runtime.command, alreadyInstalled: true }
+
+  if (Array.isArray(variant.runtimeArchives) && variant.runtimeArchives.length) {
+    let downloadedBytes = 0
+    let lastResult = null
+    for (const artifact of variant.runtimeArchives) {
+      const archivePath = runtimeArchivePathFor(variant, artifact)
+      const artifactBytes = artifact.estimatedBytes || 0
+      let bytes = 0
+      if (onProgress) onProgress(downloadedBytes, variant.runtimeEstimatedBytes || 0, path.basename(archivePath))
+      lastResult = await downloadFile(artifact.url, archivePath, artifact.sha256, (chunkBytes) => {
+        bytes += chunkBytes
+        if (onProgress) onProgress(downloadedBytes + bytes, variant.runtimeEstimatedBytes || artifactBytes, path.basename(archivePath))
+      })
+      const destination = artifact.extractDir ? path.resolve(RUNTIME_DIR, artifact.extractDir) : RUNTIME_DIR
+      if (destination !== path.resolve(RUNTIME_DIR) && !destination.startsWith(path.resolve(RUNTIME_DIR) + path.sep)) {
+        throw new Error(`Refusing unsafe runtime destination: ${artifact.extractDir}`)
+      }
+      extractRuntimeArchive(archivePath, destination)
+      fs.rmSync(archivePath, { force: true })
+      downloadedBytes += artifactBytes || bytes
+    }
+    const runtimePath = runtimeArtifactPathFor(variant)
+    if (runtimePath && fs.existsSync(runtimePath) && os.platform() !== 'win32') fs.chmodSync(runtimePath, 0o755)
+    runtimeStatusCache.delete(runtimeStatusCacheKey(variant))
+    return { ...lastResult, bytes: downloadedBytes }
+  }
 
   if (variant.runtimeArchiveUrl) {
     const archivePath = runtimeArchivePathFor(variant)

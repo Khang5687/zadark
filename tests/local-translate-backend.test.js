@@ -1062,6 +1062,28 @@ describe('local translate backend', () => {
     expect(fs.readFileSync(path.join(path.dirname(installed.path), 'GEMMA_NOTICE.txt'), 'utf8')).toContain('https://ai.google.dev/gemma/terms')
   })
 
+  it('moves legacy per-variant models into shared artifact storage', () => {
+    const variant = {
+      id: 'legacy-model-variant',
+      modelStorageId: 'shared-model-artifact',
+      runtime: 'test',
+      model: 'test-model',
+      modelRef: 'fake.gguf',
+      modelUrl: `${hfBaseUrl}/model/fake.gguf`
+    }
+    const legacyDir = path.join(tempDir, 'models', variant.id)
+    const sharedPath = path.join(tempDir, 'models', variant.modelStorageId, variant.modelRef)
+    fs.mkdirSync(legacyDir, { recursive: true })
+    fs.writeFileSync(path.join(legacyDir, variant.modelRef), 'existing model')
+
+    const status = backend.variantStatus(variant, tempDir)
+
+    expect(status.installed).toBe(true)
+    expect(status.modelPath).toBe(sharedPath)
+    expect(fs.readFileSync(sharedPath, 'utf8')).toBe('existing model')
+    expect(fs.existsSync(legacyDir)).toBe(false)
+  })
+
   it('downloads a declared runtime artifact before the model', async () => {
     const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
     process.env.ZADARK_HF_ENDPOINT = hfBaseUrl
@@ -1179,6 +1201,47 @@ describe('local translate backend', () => {
       }
       fs.rmSync(extractedRuntimeDir, { recursive: true, force: true })
       fs.rmSync(runtimeDownloadDir, { recursive: true, force: true })
+    }
+  })
+
+  it('installs multiple runtime archives into isolated directories', async () => {
+    const firstDir = path.join(testRuntimeDir, 'bundle-a')
+    const secondDir = path.join(testRuntimeDir, 'bundle-b')
+    const runtimePath = path.join(secondDir, 'zip-runtime', 'bin', 'fake-server')
+    const artifactBytes = fs.statSync(runtimeZipPath).size
+    const variant = {
+      id: 'multi-runtime-archive-test',
+      runtime: 'test',
+      runtimeCandidates: [runtimePath],
+      runtimeArchives: [
+        {
+          url: `${hfBaseUrl}/runtime/zip-runtime.zip`,
+          sha256: runtimeZipSha256,
+          estimatedBytes: artifactBytes,
+          extractDir: 'bundle-a'
+        },
+        {
+          url: `${hfBaseUrl}/runtime/zip-runtime.zip`,
+          sha256: runtimeZipSha256,
+          estimatedBytes: artifactBytes,
+          extractDir: 'bundle-b'
+        }
+      ],
+      runtimeEstimatedBytes: artifactBytes * 2,
+      modelRef: 'fake.gguf',
+      modelUrl: `${hfBaseUrl}/model/fake.gguf`,
+      sha256: crypto.createHash('sha256').update('tiny gguf').digest('hex'),
+      estimatedBytes: Buffer.byteLength('tiny gguf')
+    }
+
+    try {
+      await backend.installVariant(variant, path.join(tempDir, 'multi-runtime-model'))
+      expect(fs.existsSync(path.join(firstDir, 'zip-runtime', 'bin', 'fake-server'))).toBe(true)
+      expect(fs.existsSync(runtimePath)).toBe(true)
+      expect(backend.runtimeStatus(variant).available).toBe(true)
+    } finally {
+      fs.rmSync(firstDir, { recursive: true, force: true })
+      fs.rmSync(secondDir, { recursive: true, force: true })
     }
   })
 

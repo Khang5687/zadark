@@ -79,6 +79,7 @@
   const ZADARK_TRANSLATE_FOOTNOTES_KEY = '@ZaDark:TRANSLATE_FOOTNOTES'
   const ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY = '@ZaDark:LOCAL_TRANSLATE_STORAGE_PATH'
   const ZADARK_LOCAL_TRANSLATE_VARIANT_KEY = '@ZaDark:LOCAL_TRANSLATE_VARIANT'
+  const ZADARK_LOCAL_TRANSLATE_ACCELERATOR_KEY = '@ZaDark:LOCAL_TRANSLATE_ACCELERATOR'
   const ZADARK_TRANSLATE_ENGINE_KEY = '@ZaDark:TRANSLATE_ENGINE'
   const ZADARK_THREAD_CHAT_BG_KEY = 'THREAD_CHAT_BG' // localforage key
   const getLocalTranslateApiUrl = () => window.ZADARK_LOCAL_TRANSLATE_API_URL || 'http://127.0.0.1:5555/v1'
@@ -261,6 +262,13 @@
     },
     getLocalTranslateVariant: () => {
       return localStorage.getItem(ZADARK_LOCAL_TRANSLATE_VARIANT_KEY) || ''
+    },
+    saveLocalTranslateAccelerator: (accelerator) => {
+      return localStorage.setItem(ZADARK_LOCAL_TRANSLATE_ACCELERATOR_KEY, ['cpu', 'vulkan'].includes(accelerator) ? accelerator : 'auto')
+    },
+    getLocalTranslateAccelerator: () => {
+      const accelerator = localStorage.getItem(ZADARK_LOCAL_TRANSLATE_ACCELERATOR_KEY)
+      return ['cpu', 'vulkan'].includes(accelerator) ? accelerator : 'auto'
     },
     saveTranslateEngine: (engine) => {
       return localStorage.setItem(ZADARK_TRANSLATE_ENGINE_KEY, engine === 'cloud' ? 'cloud' : 'local')
@@ -1370,6 +1378,10 @@
   const localTranslateStatusElName = '#js-local-translate-status'
   const localTranslateModelsElName = '#js-local-translate-models'
   const localTranslateProgressElName = '#js-local-translate-progress'
+  const localTranslateRuntimeStatusElName = '#js-local-translate-runtime-status'
+  const selectLocalTranslateAcceleratorElName = '#js-select-local-translate-accelerator'
+  const buttonReprobeLocalTranslateElName = '#js-button-reprobe-local-translate'
+  const buttonDeleteLocalTranslateAcceleratorElName = '#js-button-delete-local-translate-accelerator'
   const localTranslateSidebarProgressElName = '#js-local-translate-sidebar-progress'
   const localTranslateSidebarProgressFillElName = '#js-local-translate-sidebar-progress-fill'
   const inputLocalTranslateStoragePathElName = '#js-input-local-translate-storage-path'
@@ -1487,6 +1499,7 @@
     const params = new URLSearchParams()
     if (storagePath) params.set('storagePath', storagePath)
     if (variantId) params.set('variantId', variantId)
+    params.set('accelerator', ZaDarkStorage.getLocalTranslateAccelerator())
     const query = params.toString() ? `?${params}` : ''
     const res = await fetch(`${getLocalTranslateApiUrl()}/local-translate/status${query}`)
     const json = await res.json()
@@ -1516,6 +1529,17 @@
 
   const stopLocalTranslateRuntime = async () => {
     await fetch(`${getLocalTranslateApiUrl()}/local-translate/stop`, { method: 'POST' })
+  }
+
+  const localTranslateRuntimeAction = async (pathname) => {
+    const res = await fetch(`${getLocalTranslateApiUrl()}${pathname}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ variantId: ZaDarkStorage.getLocalTranslateVariant() })
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) throw new Error(json.message || 'Không thể cập nhật bộ tăng tốc')
+    return json
   }
 
   const localModelName = (variant) => String(variant.model || '').includes('12b')
@@ -2043,6 +2067,22 @@
               <progress id="js-local-translate-progress" class="zadark-local-translate-progress" max="100" value="0" hidden></progress>
             </section>
             <section class="zadark-translate-settings__section">
+              <h3>Tăng tốc phần cứng</h3>
+              <label class="zadark-translate-settings__row">
+                <span>Chế độ</span>
+                <select id="js-select-local-translate-accelerator" class="zadark-select">
+                  <option value="auto">Tự động (khuyên dùng)</option>
+                  <option value="cpu">Chỉ dùng CPU</option>
+                  <option value="vulkan">Ưu tiên Vulkan</option>
+                </select>
+              </label>
+              <p id="js-local-translate-runtime-status" class="zadark-translate-settings__status">Đang kiểm tra...</p>
+              <div class="zadark-translate-runtime-actions">
+                <button id="js-button-reprobe-local-translate" type="button">Kiểm tra lại</button>
+                <button id="js-button-delete-local-translate-accelerator" type="button" class="btn-del" hidden>Xoá bộ tăng tốc</button>
+              </div>
+            </section>
+            <section class="zadark-translate-settings__section">
               <h3>Dữ liệu bổ sung</h3>
               <div class="zadark-translate-settings__row">
                 <span id="js-local-ocr-status">OCR ảnh: đang kiểm tra...</span>
@@ -2373,18 +2413,41 @@
     const $pathInput = $(inputLocalTranslateStoragePathElName)
     const $sidebarProgress = $(localTranslateSidebarProgressElName)
     const $sidebarProgressFill = $(localTranslateSidebarProgressFillElName)
+    const $runtimeStatus = $(localTranslateRuntimeStatusElName)
+    const $deleteAccelerator = $(buttonDeleteLocalTranslateAcceleratorElName)
     stopLocalTranslateStatusPolling()
 
     try {
       const status = await getLocalTranslateStatus()
       const selected = status.selected
       const usedText = formatLocalTranslateBytes(selected.usedBytes || selected.estimatedBytes)
+      const hardware = status.hardware || {}
+      const backendNames = { mlx: 'MLX', metal: 'Metal', cuda: 'CUDA 12', vulkan: 'Vulkan', cpu: 'CPU' }
+      const runtimeName = backendNames[selected.runtimeBackend] || selected.runtimeBackend || 'CPU'
+      const gpuText = hardware.gpuNames && hardware.gpuNames.length ? ` · ${hardware.gpuNames.join(', ')}` : ''
+      const acceleratorMode = ZaDarkStorage.getLocalTranslateAccelerator()
+
+      if (selected.id !== ZaDarkStorage.getLocalTranslateVariant()) {
+        ZaDarkStorage.saveLocalTranslateVariant(selected.id)
+      }
+      $(selectLocalTranslateAcceleratorElName)
+        .val(acceleratorMode)
+        .find('option[value="vulkan"]')
+        .prop('disabled', !(status.accelerators || []).includes('vulkan'))
 
       $pathInput.attr('title', selected.storagePath)
       renderLocalTranslateModels(status)
       $progress.prop('hidden', true).val(0)
       $sidebarProgress.prop('hidden', true).attr('aria-valuenow', 0)
       $sidebarProgressFill.css('width', '0%')
+      $runtimeStatus
+        .text(selected.runtimeFallback
+          ? `Đang dùng CPU dự phòng${gpuText}. Bộ tăng tốc không vượt qua kiểm tra.`
+          : `Đang dùng ${runtimeName}${gpuText}.`)
+        .attr('title', selected.runtimeCommand || selected.runtimeMessage || '')
+      $deleteAccelerator
+        .prop('hidden', !['cuda', 'vulkan'].includes(selected.accelerator) || !selected.acceleratorUsedBytes)
+        .prop('disabled', selected.installing)
 
       if (selected.installing) {
         const progress = selected.installProgress || {}
@@ -2418,6 +2481,8 @@
       $(localTranslateModelsElName).empty().append(
         $('<div>').addClass('zadark-translate-model__error').text(error.message)
       )
+      $runtimeStatus.text('Không thể kiểm tra bộ tăng tốc').attr('title', error.message)
+      $deleteAccelerator.prop('hidden', true)
     }
 
     const $ocrStatus = $(localOcrStatusElName)
@@ -2510,6 +2575,44 @@
       $button.prop('disabled', false)
     } finally {
       $button.text('Xoá OCR')
+    }
+  }
+
+  const handleReprobeLocalTranslate = async function () {
+    const $button = $(this).prop('disabled', true)
+    try {
+      await localTranslateRuntimeAction('/local-translate/reprobe')
+      await loadLocalTranslateStatus()
+    } catch (error) {
+      ZaDarkUtils.showToast(error.message, { className: 'toastify--error', duration: 3000 })
+    } finally {
+      $button.prop('disabled', false)
+    }
+  }
+
+  const handleDeleteLocalTranslateAccelerator = async function () {
+    const $button = $(this).prop('disabled', true)
+    try {
+      await localTranslateRuntimeAction('/local-translate/delete-accelerator')
+      ZaDarkUtils.showToast('Đã xoá bộ tăng tốc. ZaDark vẫn có thể dùng CPU.')
+      await loadLocalTranslateStatus()
+    } catch (error) {
+      ZaDarkUtils.showToast(error.message, { className: 'toastify--error', duration: 3000 })
+    } finally {
+      $button.prop('disabled', false)
+    }
+  }
+
+  const handleLocalTranslateAcceleratorChange = async function () {
+    const $select = $(this).prop('disabled', true)
+    ZaDarkStorage.saveLocalTranslateAccelerator($select.val())
+    try {
+      await stopLocalTranslateRuntime()
+      await loadLocalTranslateStatus()
+    } catch (error) {
+      ZaDarkUtils.showToast(error.message, { className: 'toastify--error', duration: 3000 })
+    } finally {
+      $select.prop('disabled', false)
     }
   }
 
@@ -2706,6 +2809,9 @@
 
     $(localTranslateModelsElName).on('click', '[data-action="install"],[data-action="select"]', handleLocalTranslateModelAction)
     $(localTranslateModelsElName).on('click', buttonDeleteLocalTranslateModelElName, handleDeleteLocalTranslateModel)
+    $(buttonReprobeLocalTranslateElName).on('click', handleReprobeLocalTranslate)
+    $(buttonDeleteLocalTranslateAcceleratorElName).on('click', handleDeleteLocalTranslateAccelerator)
+    $(selectLocalTranslateAcceleratorElName).on('change', handleLocalTranslateAcceleratorChange)
     $(buttonDeleteLocalOcrElName).on('click', handleDeleteLocalOcr)
 
     $(inputThreadChatBgElName).on('click', function (e) {

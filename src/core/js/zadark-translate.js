@@ -1,6 +1,7 @@
 (function ($) {
   const ZADARK_LOCAL_TRANSLATE_STORAGE_PATH_KEY = '@ZaDark:LOCAL_TRANSLATE_STORAGE_PATH'
   const ZADARK_LOCAL_TRANSLATE_VARIANT_KEY = '@ZaDark:LOCAL_TRANSLATE_VARIANT'
+  const ZADARK_LOCAL_TRANSLATE_ACCELERATOR_KEY = '@ZaDark:LOCAL_TRANSLATE_ACCELERATOR'
   const ZADARK_TRANSLATE_FOOTNOTES_KEY = '@ZaDark:TRANSLATE_FOOTNOTES'
   const ZADARK_TRANSLATE_ENGINE_KEY = '@ZaDark:TRANSLATE_ENGINE'
 
@@ -25,6 +26,11 @@
   }
 
   const getLocalTranslateVariant = () => localStorage.getItem(ZADARK_LOCAL_TRANSLATE_VARIANT_KEY) || ''
+
+  const getLocalTranslateAccelerator = () => {
+    const accelerator = localStorage.getItem(ZADARK_LOCAL_TRANSLATE_ACCELERATOR_KEY)
+    return ['cpu', 'vulkan'].includes(accelerator) ? accelerator : 'auto'
+  }
 
   const localTranslateStoragePayload = () => {
     if (!isLocalTranslate()) return {}
@@ -269,6 +275,7 @@
     const params = new URLSearchParams()
     if (storagePath) params.set('storagePath', storagePath)
     if (variantId) params.set('variantId', variantId)
+    params.set('accelerator', getLocalTranslateAccelerator())
     const query = params.toString() ? `?${params}` : ''
     const res = await fetch(getTranslateApiURL() + '/local-translate/status' + query)
     const json = await res.json()
@@ -581,6 +588,9 @@
     if (!isLocalTranslate()) return true
 
     const status = await getLocalTranslateStatus()
+    if (status.selected && status.selected.id !== getLocalTranslateVariant()) {
+      localStorage.setItem(ZADARK_LOCAL_TRANSLATE_VARIANT_KEY, status.selected.id)
+    }
     if (status.selected && status.selected.installing) {
       const progress = status.selected.installProgress || {}
       localTranslateNotReadyMessage = `ZaDark đang tải model dịch trong nền${progress.percent ? `: ${progress.percent}%` : ''}. Bạn có thể tiếp tục dùng Zalo.`

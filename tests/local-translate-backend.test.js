@@ -776,6 +776,19 @@ describe('local translate backend', () => {
     expect(variants.every((variant) => variant.runtimeArchives.length === 3)).toBe(true)
   })
 
+  it('honors a supported manual accelerator mode for the chosen model', () => {
+    const hardware = backend.detectHardware()
+    const manifest = {
+      variants: [
+        { id: 'auto-runtime', model: 'small', platform: hardware.platform, arch: hardware.arch, accelerator: hardware.accelerator, serverCommand: process.execPath },
+        { id: 'cpu-runtime', model: 'small', platform: hardware.platform, arch: hardware.arch, accelerator: 'cpu', serverCommand: process.execPath }
+      ]
+    }
+
+    expect(backend.selectVariant(manifest, 'auto-runtime', 'cpu').id).toBe('cpu-runtime')
+    expect(() => backend.selectVariant(manifest, 'auto-runtime', 'vulkan')).toThrow('No vulkan runtime is available')
+  })
+
   it('offers one 4B and one 12B choice for the current platform', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src/pc/local-translate/model-manifest.json')))
     const variants = backend.compatibleVariants(manifest)
@@ -1319,6 +1332,33 @@ describe('local translate backend', () => {
       fs.rmSync(firstDir, { recursive: true, force: true })
       fs.rmSync(secondDir, { recursive: true, force: true })
     }
+  })
+
+  it('removes accelerator files while retaining the CPU fallback', () => {
+    const accelerated = path.join(testRuntimeDir, 'cleanup-test', 'vulkan')
+    const fallback = path.join(testRuntimeDir, 'cleanup-test', 'win-cpu')
+    fs.mkdirSync(accelerated, { recursive: true })
+    fs.mkdirSync(fallback, { recursive: true })
+    fs.writeFileSync(path.join(accelerated, 'runtime.bin'), 'gpu')
+    fs.writeFileSync(path.join(fallback, 'runtime.bin'), 'cpu')
+
+    const result = backend.deleteVariantAccelerator({
+      runtimeArchives: [
+        { extractDir: 'cleanup-test/vulkan' },
+        { extractDir: 'cleanup-test/win-cpu' }
+      ]
+    })
+
+    expect(result.deletedDirectories).toEqual(['cleanup-test/vulkan'])
+    expect(fs.existsSync(accelerated)).toBe(false)
+    expect(fs.existsSync(fallback)).toBe(true)
+    fs.rmSync(path.join(testRuntimeDir, 'cleanup-test'), { recursive: true, force: true })
+  })
+
+  it('clears the runtime probe cache through the local API', async () => {
+    const result = await postJson(baseUrl, '/v1/local-translate/reprobe', {})
+    expect(result.status).toBe(200)
+    expect(result.body.success).toBe(true)
   })
 
   it('rejects unsafe runtime archive paths', () => {

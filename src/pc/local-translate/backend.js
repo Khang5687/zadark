@@ -746,9 +746,10 @@ function assessVariant (variant, hardware) {
   }
 }
 
-function compatibleVariants (manifest, hardware = detectHardware()) {
+function compatibleVariants (manifest, hardware = detectHardware(), acceleratorMode = 'auto') {
   const ranked = manifest.variants
     .filter((variant) => isCompatibleVariant(variant, hardware))
+    .filter((variant) => acceleratorMode === 'auto' || variant.accelerator === acceleratorMode)
     .sort((a, b) => scoreVariant(b, hardware) - scoreVariant(a, hardware))
   const models = []
   const seen = new Set()
@@ -762,16 +763,22 @@ function compatibleVariants (manifest, hardware = detectHardware()) {
   return models
 }
 
-function selectVariant (manifest, requestedId) {
+function selectVariant (manifest, requestedId, acceleratorMode = '') {
   const hardware = detectHardware()
   if (requestedId) {
     const requested = manifest.variants.find((variant) => variant.id === requestedId)
     if (!requested) throw new Error(`Unknown model variant: ${requestedId}`)
     if (!isCompatibleVariant(requested, hardware)) throw new Error(`Model variant is not compatible with this device: ${requestedId}`)
+    if (acceleratorMode) {
+      const choices = compatibleVariants(manifest, hardware, acceleratorMode)
+      const selected = choices.find((variant) => variant.model === requested.model)
+      if (!selected) throw new Error(`No ${acceleratorMode} runtime is available for this model`)
+      return selected
+    }
     return requested
   }
 
-  const compatible = compatibleVariants(manifest, hardware)
+  const compatible = compatibleVariants(manifest, hardware, acceleratorMode || 'auto')
   return compatible.find((variant) => variant.model === manifest.defaultModel) || compatible[0] || manifest.variants[0]
 }
 
@@ -864,12 +871,22 @@ function variantStatus (variant, storagePath) {
   const runtimeEstimatedBytes = variant.runtimeEstimatedBytes || 0
   const isSnapshot = variant.downloadKind === 'hf-snapshot'
   const runtime = runtimeStatus(variant)
+  const runtimeDirs = Array.from(new Set((variant.runtimeArchives || [])
+    .map((artifact) => artifact.extractDir)
+    .filter(Boolean)))
+  const runtimeUsedBytes = runtimeDirs.reduce((total, directory) => {
+    return total + directorySize(path.resolve(RUNTIME_DIR, directory))
+  }, 0)
+  const acceleratorUsedBytes = runtimeDirs
+    .filter((directory) => !/win-cpu(?:\/|$)/.test(directory))
+    .reduce((total, directory) => total + directorySize(path.resolve(RUNTIME_DIR, directory)), 0)
   const installProgress = installProgressFor(variant, root)
   const installed = isSnapshot ? snapshotInstalled(variant, root) : !!variant.modelUrl && fs.existsSync(modelPath)
   const downloadEstimatedBytes = (installed ? 0 : estimatedBytes) + (runtime.available && !runtime.fallback ? 0 : runtimeEstimatedBytes)
   return {
     id: variant.id,
     runtime: variant.runtime,
+    accelerator: variant.accelerator || 'cpu',
     model: variant.model,
     modelRef: variant.modelRef,
     estimatedBytes,
@@ -888,6 +905,9 @@ function variantStatus (variant, storagePath) {
     runtimeAvailable: runtime.available,
     runtimeCommand: runtime.command || '',
     runtimeFallback: !!runtime.fallback,
+    runtimeBackend: runtime.fallback ? 'cpu' : (variant.accelerator || 'cpu'),
+    runtimeUsedBytes,
+    acceleratorUsedBytes,
     runtimeMessage: runtime.message,
     idleTimeoutMs: IDLE_TIMEOUT_MS,
     lastUsedAt: state.lastUsedAt,
@@ -1253,6 +1273,22 @@ function deleteVariantModel (variant, storagePath) {
   const modelDir = modelDirFor(variant, storagePath)
   fs.rmSync(modelDir, { recursive: true, force: true })
   return { deletedPath: modelDir }
+}
+
+function deleteVariantAccelerator (variant) {
+  if (installs.size) throw new Error('Cannot remove a runtime while a download is active')
+  stopRuntime()
+  const directories = Array.from(new Set((variant.runtimeArchives || [])
+    .map((artifact) => artifact.extractDir)
+    .filter((directory) => directory && !/win-cpu(?:\/|$)/.test(directory))))
+  directories.forEach((directory) => {
+    const target = path.resolve(RUNTIME_DIR, directory)
+    if (target !== path.resolve(RUNTIME_DIR) && target.startsWith(path.resolve(RUNTIME_DIR) + path.sep)) {
+      fs.rmSync(target, { recursive: true, force: true })
+    }
+  })
+  runtimeStatusCache.clear()
+  return { deletedDirectories: directories }
 }
 
 function normalizeContext (context) {
@@ -1965,11 +2001,17 @@ async function route (req, res) {
 
     if (req.method === 'GET' && url.pathname === '/v1/local-translate/status') {
       const storagePath = url.searchParams.get('storagePath') || DEFAULT_STORAGE_DIR
-      const variant = selectVariant(manifest, url.searchParams.get('variantId'))
+      const acceleratorMode = url.searchParams.get('accelerator') || ''
+      const variant = selectVariant(manifest, url.searchParams.get('variantId'), acceleratorMode)
+      const hardware = detectHardware()
       return json(req, res, 200, {
-        hardware: detectHardware(),
+        hardware,
+        acceleratorMode: acceleratorMode || 'auto',
+        accelerators: Array.from(new Set(manifest.variants
+          .filter((candidate) => isCompatibleVariant(candidate, hardware))
+          .map((candidate) => candidate.accelerator))),
         selected: variantStatus(variant, storagePath),
-        variants: compatibleVariants(manifest).map((variant) => variantStatus(variant, storagePath))
+        variants: compatibleVariants(manifest, hardware, acceleratorMode || 'auto').map((variant) => variantStatus(variant, storagePath))
       })
     }
 
@@ -2062,6 +2104,17 @@ async function route (req, res) {
       return json(req, res, 200, { success: true, variant: variant.id, ...deleteVariantModel(variant, body.storagePath) })
     }
 
+    if (req.method === 'POST' && url.pathname === '/v1/local-translate/delete-accelerator') {
+      const body = await readJsonBody(req)
+      const variant = selectVariant(manifest, body.variantId)
+      return json(req, res, 200, { success: true, variant: variant.id, ...deleteVariantAccelerator(variant) })
+    }
+
+    if (req.method === 'POST' && url.pathname === '/v1/local-translate/reprobe') {
+      runtimeStatusCache.clear()
+      return json(req, res, 200, { success: true })
+    }
+
     if (req.method === 'POST' && url.pathname === '/v1/translate') {
       const body = await readJsonBody(req)
       return json(req, res, 200, await translate(body))
@@ -2138,6 +2191,7 @@ module.exports = {
   compatibleVariants,
   chooseAccelerator,
   detectHardware,
+  deleteVariantAccelerator,
   getDiskInfo,
   installVariant,
   normalizeContext,

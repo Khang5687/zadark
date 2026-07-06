@@ -192,6 +192,33 @@
     margin-top: 8px;
   }
 
+  .zadark-local-translate-dialog__model {
+    display: grid;
+    gap: 6px;
+    margin-top: 14px;
+
+    font-weight: 600;
+  }
+
+  .zadark-local-translate-dialog__select {
+    width: 100%;
+    height: 36px;
+    padding: 0 10px;
+
+    border: 1px solid var(--zadark-border-base);
+    border-radius: var(--zadark-rounded-base);
+
+    background: var(--zadark-white-base);
+    color: var(--zadark-neutral-base);
+    font: inherit;
+  }
+
+  .zadark-local-translate-dialog__hint {
+    margin-top: 6px;
+    color: var(--zadark-neutral-500);
+    font-size: 12px;
+  }
+
   .zadark-local-translate-dialog__terms {
     display: flex;
     gap: 8px;

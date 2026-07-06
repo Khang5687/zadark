@@ -263,9 +263,9 @@
       .map(formatContextItem)
   }
 
-  const getLocalTranslateStatus = async () => {
+  const getLocalTranslateStatus = async (requestedVariantId = '') => {
     const storagePath = getLocalTranslateStoragePath()
-    const variantId = getLocalTranslateVariant()
+    const variantId = requestedVariantId || getLocalTranslateVariant()
     const params = new URLSearchParams()
     if (storagePath) params.set('storagePath', storagePath)
     if (variantId) params.set('variantId', variantId)
@@ -284,7 +284,7 @@
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ variantId, acceptedGemmaTerms, ...localTranslateStoragePayload() })
+      body: JSON.stringify({ ...localTranslateStoragePayload(), variantId, acceptedGemmaTerms })
     })
     const json = await res.json()
     if (!res.ok || !json.success) {
@@ -414,22 +414,22 @@
 
   const showLocalTranslateSetup = (status) => {
     return new Promise((resolve) => {
-      const selected = status.selected
-      const disk = selected.disk || {}
-      const totalBytes = disk.totalBytes || 0
-      const freeBytes = disk.freeBytes || 0
-      const usedPercent = totalBytes ? Math.min(100, ((totalBytes - freeBytes) / totalBytes) * 100) : 0
-      const modelPercent = disk.modelPercent || 0
-      const modelLeft = Math.min(100, usedPercent)
-      const modelWidth = Math.max(2, Math.min(100 - modelLeft, modelPercent))
-      const isInstalling = !!selected.installing
-      const installProgress = selected.installProgress || {}
-      const downloadBytes = selected.downloadEstimatedBytes || selected.estimatedBytes
-      const freeAfterBytes = Math.max(0, freeBytes - downloadBytes)
-      const runtimeCanInstall = selected.runtimeAvailable !== false || selected.runtimeDownloadable
-      const canDownload = !isInstalling && runtimeCanInstall && selected.downloadable && disk.fits !== false
-      const requiresGemmaTerms = String(selected.model || '').toLowerCase().includes('gemma')
-      const installButtonText = isInstalling ? `Đang tải ${installProgress.percent || 0}%` : 'Đồng ý và tải'
+      let selected = status.selected
+
+      const modelName = (variant) => String(variant.model || '').includes('12b') ? 'TranslateGemma 12B' : 'TranslateGemma 4B'
+      const capabilityText = (variant) => {
+        const level = variant.capability && variant.capability.level
+        if (level === 'recommended') return 'Phù hợp với máy này. Chất lượng dịch tốt nhất, nhưng tải và chạy chậm hơn.'
+        if (level === 'supported') return 'Máy này có thể chạy, nhưng 4B sẽ nhẹ và phản hồi nhanh hơn.'
+        if (level === 'slower') return 'Có thể chạy, nhưng dự kiến chậm trên máy này. 4B được khuyên dùng.'
+        if (level === 'not-recommended') return `Không khuyên dùng: cần ít nhất ${variant.capability.minimumMemoryGb} GB RAM. Model có thể chạy chậm hoặc hết bộ nhớ.`
+        return 'Không tương thích với máy này.'
+      }
+
+      const optionText = (variant) => {
+        const suffix = String(variant.model || '').includes('12b') ? 'chất lượng cao' : 'mặc định, nhẹ hơn'
+        return `${modelName(variant)} - ${formatBytes(variant.downloadEstimatedBytes || variant.estimatedBytes)} - ${suffix}`
+      }
 
       const $dialog = $(`
         <div class="zadark-local-translate-dialog">
@@ -438,32 +438,29 @@
             <div class="zadark-local-translate-dialog__text">
               Chức năng dịch này miễn phí và riêng tư vì model AI chạy trực tiếp trên máy tính của bạn.
             </div>
-            <div class="zadark-local-translate-dialog__text">
-              ZaDark cần tải khoảng <strong>${formatBytes(downloadBytes)}</strong>. Ổ đĩa hiện còn <strong>${formatBytes(freeBytes)}</strong>, sau khi tải còn khoảng <strong>${formatBytes(freeAfterBytes)}</strong>.
-            </div>
-            <div class="zadark-local-translate-dialog__text">
-              Model dịch dùng Google TranslateGemma và có điều khoản sử dụng riêng.
-            </div>
-            ${requiresGemmaTerms
-              ? `<label class="zadark-local-translate-dialog__terms">
-                  <input type="checkbox" class="zadark-local-translate-dialog__terms-input">
-                  <span>Tôi đã đọc và đồng ý với <a href="https://ai.google.dev/gemma/terms" target="_blank" rel="noopener noreferrer">Điều khoản sử dụng Gemma</a> và <a href="https://ai.google.dev/gemma/prohibited_use_policy" target="_blank" rel="noopener noreferrer">Chính sách sử dụng bị cấm</a>.</span>
-                </label>`
-              : ''}
+            <label class="zadark-local-translate-dialog__model">
+              <span>Model dịch</span>
+              <select class="zadark-local-translate-dialog__select">
+                ${status.variants.map((variant) => `<option value="${variant.id}" ${variant.id === selected.id ? 'selected' : ''}>${optionText(variant)}</option>`).join('')}
+              </select>
+            </label>
+            <div class="zadark-local-translate-dialog__hint" tabindex="0"></div>
+            <div class="zadark-local-translate-dialog__text" data-role="storage-summary"></div>
+            <div data-role="terms"></div>
             <div class="zadark-local-translate-dialog__disk">
               <div class="zadark-local-translate-dialog__bar">
-                <div class="zadark-local-translate-dialog__bar-used" style="width: ${usedPercent}%"></div>
-                <div class="zadark-local-translate-dialog__bar-model" style="left: ${modelLeft}%; width: ${modelWidth}%"></div>
+                <div class="zadark-local-translate-dialog__bar-used"></div>
+                <div class="zadark-local-translate-dialog__bar-model"></div>
               </div>
               <div class="zadark-local-translate-dialog__disk-meta">
-                <span>Model AI: ${formatBytes(downloadBytes)}</span>
-                <span>Còn lại sau tải: ${formatBytes(freeAfterBytes)}</span>
+                <span data-role="download-size"></span>
+                <span data-role="free-after"></span>
               </div>
             </div>
             <div class="zadark-local-translate-dialog__error"></div>
             <div class="zadark-local-translate-dialog__actions">
               <button type="button" class="zadark-local-translate-dialog__button" data-action="cancel">Huỷ</button>
-              <button type="button" class="zadark-local-translate-dialog__button zadark-local-translate-dialog__button--primary" data-action="install" ${canDownload && !requiresGemmaTerms ? '' : 'disabled'}>${installButtonText}</button>
+              <button type="button" class="zadark-local-translate-dialog__button zadark-local-translate-dialog__button--primary" data-action="install" disabled>Đồng ý và tải</button>
             </div>
           </div>
         </div>
@@ -496,28 +493,75 @@
       }
 
       const $error = $dialog.find('.zadark-local-translate-dialog__error')
+      const renderSelected = () => {
+        const disk = selected.disk || {}
+        const totalBytes = disk.totalBytes || 0
+        const freeBytes = disk.freeBytes || 0
+        const downloadBytes = selected.downloadEstimatedBytes || selected.estimatedBytes || 0
+        const freeAfterBytes = Math.max(0, freeBytes - downloadBytes)
+        const usedPercent = totalBytes ? Math.min(100, ((totalBytes - freeBytes) / totalBytes) * 100) : 0
+        const modelPercent = disk.modelPercent || 0
+        const modelLeft = Math.min(100, usedPercent)
+        const modelWidth = Math.max(2, Math.min(100 - modelLeft, modelPercent))
+        const requiresGemmaTerms = String(selected.model || '').toLowerCase().includes('gemma')
+        const hint = capabilityText(selected)
+
+        $dialog.find('.zadark-local-translate-dialog__hint').text(hint).attr('title', hint)
+        $dialog.find('[data-role="storage-summary"]').html(`ZaDark cần tải khoảng <strong>${formatBytes(downloadBytes)}</strong>. Ổ đĩa hiện còn <strong>${formatBytes(freeBytes)}</strong>, sau khi tải còn khoảng <strong>${formatBytes(freeAfterBytes)}</strong>.`)
+        $dialog.find('.zadark-local-translate-dialog__bar-used').css('width', `${usedPercent}%`)
+        $dialog.find('.zadark-local-translate-dialog__bar-model').css({ left: `${modelLeft}%`, width: `${modelWidth}%` })
+        $dialog.find('[data-role="download-size"]').text(`Model và bộ chạy: ${formatBytes(downloadBytes)}`)
+        $dialog.find('[data-role="free-after"]').text(`Còn lại sau tải: ${formatBytes(freeAfterBytes)}`)
+        $dialog.find('[data-role="terms"]').html(requiresGemmaTerms
+          ? `<label class="zadark-local-translate-dialog__terms">
+              <input type="checkbox" class="zadark-local-translate-dialog__terms-input">
+              <span>Tôi đã đọc và đồng ý với <a href="https://ai.google.dev/gemma/terms" target="_blank" rel="noopener noreferrer">Điều khoản sử dụng Gemma</a> và <a href="https://ai.google.dev/gemma/prohibited_use_policy" target="_blank" rel="noopener noreferrer">Chính sách sử dụng bị cấm</a>.</span>
+            </label>`
+          : '')
+
+        $error.removeClass('zadark-local-translate-dialog__error--status').text('')
+        const runtimeCanInstall = selected.runtimeAvailable !== false || selected.runtimeDownloadable
+        if (!selected.downloadable) $error.text('Model AI chưa có gói tải thử nghiệm.')
+        else if (!runtimeCanInstall) $error.text('Bộ chạy AI chưa sẵn sàng cho máy này.')
+        else if (disk.fits === false) $error.text('Ổ đĩa này không đủ dung lượng trống.')
+        updateInstallButton()
+      }
+
       const updateInstallButton = () => {
+        const disk = selected.disk || {}
+        const runtimeCanInstall = selected.runtimeAvailable !== false || selected.runtimeDownloadable
+        const canDownload = !selected.installing && runtimeCanInstall && selected.downloadable && disk.fits !== false
+        const requiresGemmaTerms = String(selected.model || '').toLowerCase().includes('gemma')
         const accepted = !requiresGemmaTerms || $dialog.find('.zadark-local-translate-dialog__terms-input').prop('checked')
         $dialog.find('[data-action="install"]').prop('disabled', !canDownload || !accepted)
-      }
-      if (!selected.downloadable) {
-        $error.text('Model AI chưa có gói tải thử nghiệm.')
-      } else if (!runtimeCanInstall) {
-        $error.text('Runtime AI chưa sẵn sàng trong bản thử nghiệm này.')
-      } else if (disk.fits === false) {
-        $error.text('Ổ đĩa này không đủ dung lượng trống.')
       }
 
       $dialog.on('click', '[data-action="cancel"]', () => finish(false))
       $dialog.on('change', '.zadark-local-translate-dialog__terms-input', updateInstallButton)
+      $dialog.on('change', '.zadark-local-translate-dialog__select', async function () {
+        const variantId = $(this).val()
+        $dialog.find('.zadark-local-translate-dialog__select').prop('disabled', true)
+        $error.removeClass('zadark-local-translate-dialog__error--status').text('Đang kiểm tra dung lượng...')
+        try {
+          const refreshedStatus = await getLocalTranslateStatus(variantId)
+          selected = refreshedStatus.selected
+          renderSelected()
+        } catch (error) {
+          $error.text(error.message)
+        } finally {
+          $dialog.find('.zadark-local-translate-dialog__select').prop('disabled', false)
+        }
+      })
       $dialog.on('click', '[data-action="install"]', async function () {
         const $button = $(this)
+        const requiresGemmaTerms = String(selected.model || '').toLowerCase().includes('gemma')
         const acceptedGemmaTerms = !requiresGemmaTerms || $dialog.find('.zadark-local-translate-dialog__terms-input').prop('checked')
         if (!acceptedGemmaTerms) return
         $button.prop('disabled', true).text('Đang tải...')
         $dialog.find('[data-action="cancel"]').prop('disabled', true)
         $error.removeClass('zadark-local-translate-dialog__error--status').text('')
         localTranslateNotReadyMessage = 'ZaDark đang tải model dịch trong nền. Bạn có thể tiếp tục dùng Zalo.'
+        localStorage.setItem(ZADARK_LOCAL_TRANSLATE_VARIANT_KEY, selected.id)
         installLocalTranslateModel(selected.id, acceptedGemmaTerms).catch(() => {})
         document.dispatchEvent(new CustomEvent('@ZaDark:LOCAL_TRANSLATE_INSTALLING'))
         $button.text('Đang tải trong nền...')
@@ -528,7 +572,8 @@
       })
 
       $('body').append($dialog)
-      if (isInstalling) pollInstallProgress($dialog.find('[data-action="install"]'))
+      renderSelected()
+      if (selected.installing) pollInstallProgress($dialog.find('[data-action="install"]'))
     })
   }
 

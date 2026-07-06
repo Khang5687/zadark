@@ -776,6 +776,43 @@ describe('local translate backend', () => {
     expect(variants.every((variant) => variant.runtimeArchives.length === 3)).toBe(true)
   })
 
+  it('offers both models to a GTX 1650 while recommending 4B', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src/pc/local-translate/model-manifest.json')))
+    const hardware = {
+      platform: 'win32',
+      arch: 'x64',
+      accelerator: 'cuda',
+      totalMemGb: 16,
+      gpuMemoryGb: 4,
+      gpuNames: ['NVIDIA GeForce GTX 1650'],
+      nvidiaDriverVersion: '555.99',
+      vulkanAvailable: true
+    }
+    const variants = backend.compatibleVariants(manifest, hardware)
+
+    expect(variants.map((variant) => variant.model).sort()).toEqual([
+      'translategemma-12b-it',
+      'translategemma-4b-it'
+    ])
+    expect(backend.assessVariant(variants.find((variant) => variant.model === 'translategemma-12b-it'), hardware).level).toBe('slower')
+    expect(backend.availableAccelerators(manifest, hardware)).toEqual(expect.arrayContaining(['cuda', 'vulkan', 'cpu']))
+  })
+
+  it('does not offer CUDA on non-NVIDIA Windows graphics', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src/pc/local-translate/model-manifest.json')))
+    const accelerators = backend.availableAccelerators(manifest, {
+      platform: 'win32',
+      arch: 'x64',
+      accelerator: 'vulkan',
+      gpuNames: ['AMD Radeon RX 6600'],
+      vulkanAvailable: true
+    })
+
+    expect(accelerators).toContain('vulkan')
+    expect(accelerators).toContain('cpu')
+    expect(accelerators).not.toContain('cuda')
+  })
+
   it('honors a supported manual accelerator mode for the chosen model', () => {
     const hardware = backend.detectHardware()
     const manifest = {
@@ -787,6 +824,31 @@ describe('local translate backend', () => {
 
     expect(backend.selectVariant(manifest, 'auto-runtime', 'cpu').id).toBe('cpu-runtime')
     expect(() => backend.selectVariant(manifest, 'auto-runtime', 'vulkan')).toThrow('No vulkan runtime is available')
+  })
+
+  it('migrates a saved variant from another platform to the same model', () => {
+    const hardware = backend.detectHardware()
+    const otherPlatform = hardware.platform === 'win32' ? 'darwin' : 'win32'
+    const manifest = {
+      variants: [
+        { id: 'stale', model: 'small', platform: otherPlatform, arch: hardware.arch, accelerator: 'cpu' },
+        { id: 'current', model: 'small', platform: hardware.platform, arch: hardware.arch, accelerator: 'cpu', serverCommand: process.execPath }
+      ]
+    }
+
+    expect(backend.selectVariant(manifest, 'stale').id).toBe('current')
+  })
+
+  it('honors a supported manual CUDA mode', () => {
+    const hardware = backend.detectHardware()
+    const manifest = {
+      variants: [
+        { id: 'auto-runtime', model: 'small', platform: hardware.platform, arch: hardware.arch, accelerator: 'cpu', serverCommand: process.execPath },
+        { id: 'cuda-runtime', model: 'small', platform: hardware.platform, arch: hardware.arch, accelerator: 'cuda', serverCommand: process.execPath }
+      ]
+    }
+
+    expect(backend.selectVariant(manifest, 'auto-runtime', 'cuda').id).toBe('cuda-runtime')
   })
 
   it('offers one 4B and one 12B choice for the current platform', () => {

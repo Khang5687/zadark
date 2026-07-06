@@ -29,6 +29,7 @@ const IDLE_TIMEOUT_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_IDLE_MS || 15 
 const HF_DEFAULT_ENDPOINT = 'https://huggingface.co'
 const RUNTIME_DIR = process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_DIR || path.join(DATA_DIR, 'runtimes')
 const RUNTIME_STATUS_TTL_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_RUNTIME_STATUS_TTL_MS || 30 * 1000)
+const HARDWARE_STATUS_TTL_MS = Number(process.env.ZADARK_LOCAL_TRANSLATE_HARDWARE_STATUS_TTL_MS || 5 * 60 * 1000)
 const GEMMA_NOTICE_PATH = path.join(__dirname, 'GEMMA_NOTICE.txt')
 const OCR_NOTICE_PATH = path.join(__dirname, 'OCR_NOTICE.txt')
 const ZALO_DATA_DIR = process.env.ZADARK_ZALO_DATA_DIR || (
@@ -49,6 +50,7 @@ const installs = new Map()
 const translationCache = new Map()
 const footnoteCache = new Map()
 const runtimeStatusCache = new Map()
+let hardwareStatusCache = null
 const ocrInstalls = new Map()
 const ocrCache = new Map()
 let streamQueue = Promise.resolve()
@@ -658,6 +660,10 @@ function chooseAccelerator ({ platform, arch, gpuNames = [], nvidiaDriverVersion
 }
 
 function detectHardware () {
+  if (hardwareStatusCache && Date.now() - hardwareStatusCache.checkedAt < HARDWARE_STATUS_TTL_MS) {
+    return hardwareStatusCache.value
+  }
+
   const platform = os.platform()
   const arch = os.arch()
   let gpuNames = []
@@ -696,7 +702,7 @@ function detectHardware () {
     : !!safeCommandOutput('vulkaninfo', ['--summary'])
   const accelerator = chooseAccelerator({ platform, arch, gpuNames, nvidiaDriverVersion, vulkanAvailable })
 
-  return {
+  const hardware = {
     platform,
     arch,
     accelerator,
@@ -706,6 +712,8 @@ function detectHardware () {
     nvidiaDriverVersion,
     vulkanAvailable
   }
+  hardwareStatusCache = { checkedAt: Date.now(), value: hardware }
+  return hardware
 }
 
 function scoreVariant (variant, hardware) {
@@ -765,19 +773,25 @@ function compatibleVariants (manifest, hardware = detectHardware(), acceleratorM
   return models
 }
 
-function selectVariant (manifest, requestedId, acceleratorMode = '') {
-  const hardware = detectHardware()
+function availableAccelerators (manifest, hardware) {
+  const hasNvidia = (hardware.gpuNames || []).some((name) => /nvidia/i.test(name))
+  return Array.from(new Set(manifest.variants
+    .filter((variant) => isCompatibleVariant(variant, hardware))
+    .map((variant) => variant.accelerator)))
+    .filter((accelerator) => accelerator !== 'cuda' || hasNvidia)
+    .filter((accelerator) => accelerator !== 'vulkan' || hardware.vulkanAvailable)
+}
+
+function selectVariant (manifest, requestedId, acceleratorMode = '', hardware = detectHardware()) {
   if (requestedId) {
     const requested = manifest.variants.find((variant) => variant.id === requestedId)
     if (!requested) throw new Error(`Unknown model variant: ${requestedId}`)
-    if (!isCompatibleVariant(requested, hardware)) throw new Error(`Model variant is not compatible with this device: ${requestedId}`)
-    if (acceleratorMode) {
-      const choices = compatibleVariants(manifest, hardware, acceleratorMode)
-      const selected = choices.find((variant) => variant.model === requested.model)
-      if (!selected) throw new Error(`No ${acceleratorMode} runtime is available for this model`)
-      return selected
-    }
-    return requested
+    if (isCompatibleVariant(requested, hardware) && !acceleratorMode) return requested
+
+    const choices = compatibleVariants(manifest, hardware, acceleratorMode || 'auto')
+    const selected = choices.find((variant) => variant.model === requested.model)
+    if (selected) return selected
+    if (isCompatibleVariant(requested, hardware)) throw new Error(`No ${acceleratorMode} runtime is available for this model`)
   }
 
   const compatible = compatibleVariants(manifest, hardware, acceleratorMode || 'auto')
@@ -2020,14 +2034,12 @@ async function route (req, res) {
     if (req.method === 'GET' && url.pathname === '/v1/local-translate/status') {
       const storagePath = url.searchParams.get('storagePath') || DEFAULT_STORAGE_DIR
       const acceleratorMode = url.searchParams.get('accelerator') || ''
-      const variant = selectVariant(manifest, url.searchParams.get('variantId'), acceleratorMode)
       const hardware = detectHardware()
+      const variant = selectVariant(manifest, url.searchParams.get('variantId'), acceleratorMode, hardware)
       return json(req, res, 200, {
         hardware,
         acceleratorMode: acceleratorMode || 'auto',
-        accelerators: Array.from(new Set(manifest.variants
-          .filter((candidate) => isCompatibleVariant(candidate, hardware))
-          .map((candidate) => candidate.accelerator))),
+        accelerators: availableAccelerators(manifest, hardware),
         selected: variantStatus(variant, storagePath),
         variants: compatibleVariants(manifest, hardware, acceleratorMode || 'auto').map((variant) => variantStatus(variant, storagePath))
       })
@@ -2131,6 +2143,7 @@ async function route (req, res) {
 
     if (req.method === 'POST' && url.pathname === '/v1/local-translate/reprobe') {
       runtimeStatusCache.clear()
+      hardwareStatusCache = null
       return json(req, res, 200, { success: true })
     }
 
@@ -2203,6 +2216,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  availableAccelerators,
   assessVariant,
   buildCloudTranslationRequest,
   buildTranslationRequest,

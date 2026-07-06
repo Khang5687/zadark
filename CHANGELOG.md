@@ -1,5 +1,11 @@
 # Changelog
 
+## ZaDark 26.3.1
+
+- Sửa lỗi trang cài đặt Dịch AI phản hồi chậm trên Windows.
+- Sửa lỗi không hiển thị đầy đủ model 4B và 12B hoặc báo thiết bị không được hỗ trợ.
+- Cho phép người dùng có GPU NVIDIA chọn CUDA hoặc Vulkan thủ công.
+
 ## ZaDark 26.3
 
 - Thêm Dịch AI trên Zalo PC:

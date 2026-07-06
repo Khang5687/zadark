@@ -264,11 +264,11 @@
       return localStorage.getItem(ZADARK_LOCAL_TRANSLATE_VARIANT_KEY) || ''
     },
     saveLocalTranslateAccelerator: (accelerator) => {
-      return localStorage.setItem(ZADARK_LOCAL_TRANSLATE_ACCELERATOR_KEY, ['cpu', 'vulkan'].includes(accelerator) ? accelerator : 'auto')
+      return localStorage.setItem(ZADARK_LOCAL_TRANSLATE_ACCELERATOR_KEY, ['cpu', 'vulkan', 'cuda'].includes(accelerator) ? accelerator : 'auto')
     },
     getLocalTranslateAccelerator: () => {
       const accelerator = localStorage.getItem(ZADARK_LOCAL_TRANSLATE_ACCELERATOR_KEY)
-      return ['cpu', 'vulkan'].includes(accelerator) ? accelerator : 'auto'
+      return ['cpu', 'vulkan', 'cuda'].includes(accelerator) ? accelerator : 'auto'
     },
     saveTranslateEngine: (engine) => {
       return localStorage.setItem(ZADARK_TRANSLATE_ENGINE_KEY, engine === 'cloud' ? 'cloud' : 'local')
@@ -1493,6 +1493,8 @@
     return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
   }
 
+  let localTranslateStatusRequest = null
+
   const getLocalTranslateStatus = async () => {
     const storagePath = ZaDarkStorage.getLocalTranslateStoragePath()
     const variantId = ZaDarkStorage.getLocalTranslateVariant()
@@ -1501,12 +1503,20 @@
     if (variantId) params.set('variantId', variantId)
     params.set('accelerator', ZaDarkStorage.getLocalTranslateAccelerator())
     const query = params.toString() ? `?${params}` : ''
-    const res = await fetch(`${getLocalTranslateApiUrl()}/local-translate/status${query}`)
-    const json = await res.json()
-    if (!res.ok) {
-      throw new Error(json.message || 'Không thể kiểm tra model dịch')
+    const url = `${getLocalTranslateApiUrl()}/local-translate/status${query}`
+    if (localTranslateStatusRequest && localTranslateStatusRequest.url === url) return localTranslateStatusRequest.promise
+
+    const request = fetch(url).then(async (res) => {
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.message || 'Không thể kiểm tra model dịch')
+      return json
+    })
+    localTranslateStatusRequest = { url, promise: request }
+    try {
+      return await request
+    } finally {
+      if (localTranslateStatusRequest && localTranslateStatusRequest.promise === request) localTranslateStatusRequest = null
     }
-    return json
   }
 
   const deleteLocalTranslateModel = async (variantId) => {
@@ -2073,6 +2083,7 @@
                 <select id="js-select-local-translate-accelerator" class="zadark-select">
                   <option value="auto">Tự động (khuyên dùng)</option>
                   <option value="cpu">Chỉ dùng CPU</option>
+                  <option value="cuda" hidden>Ưu tiên CUDA</option>
                   <option value="vulkan">Ưu tiên Vulkan</option>
                 </select>
               </label>
@@ -2430,10 +2441,14 @@
       if (selected.id !== ZaDarkStorage.getLocalTranslateVariant()) {
         ZaDarkStorage.saveLocalTranslateVariant(selected.id)
       }
-      $(selectLocalTranslateAcceleratorElName)
-        .val(acceleratorMode)
-        .find('option[value="vulkan"]')
-        .prop('disabled', !(status.accelerators || []).includes('vulkan'))
+      const accelerators = status.accelerators || []
+      const $acceleratorSelect = $(selectLocalTranslateAcceleratorElName).val(acceleratorMode)
+      ;['cuda', 'vulkan'].forEach((accelerator) => {
+        const available = accelerators.includes(accelerator)
+        $acceleratorSelect.find(`option[value="${accelerator}"]`)
+          .prop('disabled', !available)
+          .prop('hidden', !available)
+      })
 
       $pathInput.attr('title', selected.storagePath)
       renderLocalTranslateModels(status)

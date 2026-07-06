@@ -29,7 +29,7 @@
 
   const getLocalTranslateAccelerator = () => {
     const accelerator = localStorage.getItem(ZADARK_LOCAL_TRANSLATE_ACCELERATOR_KEY)
-    return ['cpu', 'vulkan'].includes(accelerator) ? accelerator : 'auto'
+    return ['cpu', 'vulkan', 'cuda'].includes(accelerator) ? accelerator : 'auto'
   }
 
   const localTranslateStoragePayload = () => {

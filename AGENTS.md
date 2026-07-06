@@ -31,4 +31,4 @@ ZaDark uses `[two-digit year].[release sequence within that year]`.
 4. Review the staged diff so unrelated files are not included.
 5. Commit and push the release changes.
 6. Present the final Vietnamese release draft for approval.
-7. Create the GitHub release as a normal release after approval.
+7. Create the GitHub release as a normal release after approval and upload every current-version artifact from `dist/` plus its complete checksum file. Source archives alone are not a complete release.

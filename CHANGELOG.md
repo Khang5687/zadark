@@ -1,5 +1,15 @@
 # Changelog
 
+## ZaDark 26.3
+
+- Thêm Dịch AI trên Zalo PC:
+  - Dịch miễn phí và riêng tư bằng TranslateGemma chạy trực tiếp trên máy; model chỉ được tải khi người dùng chọn sử dụng.
+  - Hỗ trợ TranslateGemma 4B và 12B, tự đề xuất theo cấu hình máy, quản lý tải xuống và xoá model.
+  - Hiển thị bản dịch theo thời gian thực, dùng ngữ cảnh cuộc trò chuyện và bổ sung ghi chú cho thuật ngữ cần giải thích.
+  - Nhận dạng và dịch chữ trong hình ảnh.
+- Hỗ trợ dịch qua API đám mây do người dùng tự cấu hình.
+- Tự chọn bộ chạy phù hợp với phần cứng và chuyển về CPU khi tăng tốc không khả dụng.
+
 ## ZaDark 26.2.1
 
 - Sửa lỗi không thể gửi ảnh từ Clipboard trên Zalo PC (macOS) [#199](https://github.com/ncdai/zadark/issues/199)

@@ -575,7 +575,7 @@ function extractRuntimeArchive (archivePath, destination = RUNTIME_DIR) {
 
 function runtimeStatusCacheKey (variant) {
   return JSON.stringify({
-    id: variant.id || '',
+    runtimeId: variant.runtimeId || '',
     runtime: variant.runtime || '',
     serverCommand: variant.serverCommand || '',
     runtimeCandidates: variant.runtimeCandidates || []
@@ -606,7 +606,9 @@ function checkRuntimeStatus (variant) {
   if (String(variant.runtime || '').startsWith('llama.cpp')) {
     const command = commands.find((candidate) => {
       try {
-        childProcess.execFileSync(candidate, ['--list-devices'], {
+        const extension = path.extname(candidate)
+        const probe = path.join(path.dirname(candidate), `llama-cli${extension}`)
+        childProcess.execFileSync(commandExists(probe) ? probe : candidate, commandExists(probe) ? ['--list-devices'] : ['--version'], {
           timeout: 10000,
           windowsHide: true,
           stdio: 'ignore'

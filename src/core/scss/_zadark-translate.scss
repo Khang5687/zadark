@@ -49,6 +49,7 @@
   }
 
   .zadark-translate-msg__content {
+    position: relative;
     margin-top: 10px;
     padding: 12px;
 
@@ -57,8 +58,16 @@
 
     background: var(--white-quote);
     font-size: 0.875rem;
+    transition: opacity 180ms ease, transform 180ms ease;
+
+    &--closing {
+      opacity: 0;
+      transform: translateY(-4px);
+      pointer-events: none;
+    }
 
     &__title {
+      padding-right: 24px;
       color: var(--text-quote);
       user-select: none;
     }
@@ -92,6 +101,28 @@
       background: transparent;
       color: inherit;
       cursor: pointer;
+    }
+
+    &__close {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+
+      border: 0;
+      border-radius: 4px;
+
+      background: transparent;
+      color: inherit;
+      font-size: 18px;
+      line-height: 24px;
+      cursor: pointer;
+
+      &:hover {
+        background: rgba(128, 128, 128, 0.12);
+      }
     }
 
     .zadark-translate-footnotes__references {

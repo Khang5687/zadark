@@ -884,6 +884,14 @@
         framePending = true
         requestAnimationFrame(flush)
       }
+      let failureTimer = null
+      const dismissFailure = () => {
+        clearTimeout(failureTimer)
+        controller.abort()
+        activeTranslations.delete(buttonEl)
+        $nextTranslation.addClass('zadark-translate-msg__content--closing')
+        setTimeout(() => $nextTranslation.remove(), 180)
+      }
       const retry = () => {
         const $retry = $('<button>')
           .addClass('zadark-translate-msg__content__retry')
@@ -892,6 +900,7 @@
         $retry.on('click', (event) => {
           event.preventDefault()
           event.stopPropagation()
+          clearTimeout(failureTimer)
           $nextTranslation.remove()
           $button.trigger('click')
         })
@@ -903,7 +912,14 @@
         $nextTranslation.addClass(partial ? 'zadark-translate-msg__content--interrupted' : 'zadark-translate-msg__content--error')
         setTitle(partial ? 'Bản dịch bị gián đoạn' : `Lỗi: ${error.message}`)
         if (partial) $output.text(partial)
+        const $close = $('<button>')
+          .addClass('zadark-translate-msg__content__close')
+          .attr({ type: 'button', title: 'Đóng', 'aria-label': 'Đóng' })
+          .text('×')
+          .on('click', dismissFailure)
+        $nextTranslation.append($close)
         retry()
+        failureTimer = setTimeout(dismissFailure, 5000)
       }
 
       ;(async () => {

@@ -102,6 +102,152 @@
       "baseUrl": "http://127.0.0.1:{port}/v1"
     },
     {
+      "id": "windows-x64-cuda12-translategemma-12b-q4",
+      "platform": "win32",
+      "arch": "x64",
+      "accelerator": "cuda",
+      "minMemoryGb": 24,
+      "runtime": "llama.cpp-cuda12",
+      "runtimeId": "llama-b9867-win-cuda12-x64",
+      "model": "translategemma-12b-it",
+      "modelStorageId": "translategemma-12b-it-gguf-q4km",
+      "modelRef": "translategemma-12b-it.Q4_K_M.gguf",
+      "modelUrl": "https://huggingface.co/mradermacher/translategemma-12b-it-GGUF/resolve/fdf84c9f6fe14e69d58814f14e7b5b63bb6a1b28/translategemma-12b-it.Q4_K_M.gguf",
+      "sha256": "b7aac4b4be7ab0c49b6556c29c4467e74313df7f1e95d9f9676bb2adf0afa528",
+      "estimatedBytes": 7300794112,
+      "serverCommand": "llama-server.exe",
+      "runtimeCandidates": ["{runtimeDir}/llama-b9867/win-cuda12/llama-server.exe", "{runtimeDir}/llama-b9867/win-cpu/llama-server.exe"],
+      "runtimeArchives": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/llama-b9867-bin-win-cuda-12.4-x64.zip",
+          "sha256": "1bc6db75ed5a34dbe2b55dfb91ff46bab763844b5c1e3d338cf917329c9dcf4a",
+          "estimatedBytes": 266142585,
+          "extractDir": "llama-b9867/win-cuda12"
+        },
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/cudart-llama-bin-win-cuda-12.4-x64.zip",
+          "sha256": "8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6",
+          "estimatedBytes": 391443627,
+          "extractDir": "llama-b9867/win-cuda12"
+        },
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/llama-b9867-bin-win-cpu-x64.zip",
+          "sha256": "f2c64f32c5ce94e3b92bac030860ef3da6ec0e5b25eed3a5dc1d677f1da88547",
+          "estimatedBytes": 17486019,
+          "extractDir": "llama-b9867/win-cpu"
+        }
+      ],
+      "runtimeEstimatedBytes": 675072231,
+      "serverArgs": ["-m", "{modelPath}", "--port", "{port}", "-c", "2048", "-ngl", "99", "--jinja", "--chat-template-file", "{backendDir}/llama-chat-template.jinja"],
+      "baseUrl": "http://127.0.0.1:{port}/v1"
+    },
+    {
+      "id": "windows-x64-cuda12-translategemma-4b-q4",
+      "platform": "win32",
+      "arch": "x64",
+      "accelerator": "cuda",
+      "runtime": "llama.cpp-cuda12",
+      "runtimeId": "llama-b9867-win-cuda12-x64",
+      "model": "translategemma-4b-it",
+      "modelStorageId": "translategemma-4b-it-gguf-q4ks",
+      "modelRef": "translategemma-4b-it.Q4_K_S.gguf",
+      "modelUrl": "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/35a7486e128b19642cdc72d7b91b21ba388aaf42/translategemma-4b-it.Q4_K_S.gguf",
+      "sha256": "95c62e1c29f977c84fe5a5d9602a91213fd03a2c7b63f2884abab2ed7b5c5f57",
+      "estimatedBytes": 2377945600,
+      "serverCommand": "llama-server.exe",
+      "runtimeCandidates": ["{runtimeDir}/llama-b9867/win-cuda12/llama-server.exe", "{runtimeDir}/llama-b9867/win-cpu/llama-server.exe"],
+      "runtimeArchives": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/llama-b9867-bin-win-cuda-12.4-x64.zip",
+          "sha256": "1bc6db75ed5a34dbe2b55dfb91ff46bab763844b5c1e3d338cf917329c9dcf4a",
+          "estimatedBytes": 266142585,
+          "extractDir": "llama-b9867/win-cuda12"
+        },
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/cudart-llama-bin-win-cuda-12.4-x64.zip",
+          "sha256": "8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6",
+          "estimatedBytes": 391443627,
+          "extractDir": "llama-b9867/win-cuda12"
+        },
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/llama-b9867-bin-win-cpu-x64.zip",
+          "sha256": "f2c64f32c5ce94e3b92bac030860ef3da6ec0e5b25eed3a5dc1d677f1da88547",
+          "estimatedBytes": 17486019,
+          "extractDir": "llama-b9867/win-cpu"
+        }
+      ],
+      "runtimeEstimatedBytes": 675072231,
+      "serverArgs": ["-m", "{modelPath}", "--port", "{port}", "-c", "2048", "-ngl", "99", "--jinja", "--chat-template-file", "{backendDir}/llama-chat-template.jinja"],
+      "baseUrl": "http://127.0.0.1:{port}/v1"
+    },
+    {
+      "id": "windows-x64-vulkan-translategemma-12b-q4",
+      "platform": "win32",
+      "arch": "x64",
+      "accelerator": "vulkan",
+      "minMemoryGb": 24,
+      "runtime": "llama.cpp-vulkan",
+      "runtimeId": "llama-b9867-win-vulkan-x64",
+      "model": "translategemma-12b-it",
+      "modelStorageId": "translategemma-12b-it-gguf-q4km",
+      "modelRef": "translategemma-12b-it.Q4_K_M.gguf",
+      "modelUrl": "https://huggingface.co/mradermacher/translategemma-12b-it-GGUF/resolve/fdf84c9f6fe14e69d58814f14e7b5b63bb6a1b28/translategemma-12b-it.Q4_K_M.gguf",
+      "sha256": "b7aac4b4be7ab0c49b6556c29c4467e74313df7f1e95d9f9676bb2adf0afa528",
+      "estimatedBytes": 7300794112,
+      "serverCommand": "llama-server.exe",
+      "runtimeCandidates": ["{runtimeDir}/llama-b9867/win-vulkan/llama-server.exe", "{runtimeDir}/llama-b9867/win-cpu/llama-server.exe"],
+      "runtimeArchives": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/llama-b9867-bin-win-vulkan-x64.zip",
+          "sha256": "843333f1aa7d0c52d2e8ba346e635d2ef9832f0d6d667723351c60fd26d71454",
+          "estimatedBytes": 32164547,
+          "extractDir": "llama-b9867/win-vulkan"
+        },
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/llama-b9867-bin-win-cpu-x64.zip",
+          "sha256": "f2c64f32c5ce94e3b92bac030860ef3da6ec0e5b25eed3a5dc1d677f1da88547",
+          "estimatedBytes": 17486019,
+          "extractDir": "llama-b9867/win-cpu"
+        }
+      ],
+      "runtimeEstimatedBytes": 49650566,
+      "serverArgs": ["-m", "{modelPath}", "--port", "{port}", "-c", "2048", "-ngl", "99", "--jinja", "--chat-template-file", "{backendDir}/llama-chat-template.jinja"],
+      "baseUrl": "http://127.0.0.1:{port}/v1"
+    },
+    {
+      "id": "windows-x64-vulkan-translategemma-4b-q4",
+      "platform": "win32",
+      "arch": "x64",
+      "accelerator": "vulkan",
+      "runtime": "llama.cpp-vulkan",
+      "runtimeId": "llama-b9867-win-vulkan-x64",
+      "model": "translategemma-4b-it",
+      "modelStorageId": "translategemma-4b-it-gguf-q4ks",
+      "modelRef": "translategemma-4b-it.Q4_K_S.gguf",
+      "modelUrl": "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/35a7486e128b19642cdc72d7b91b21ba388aaf42/translategemma-4b-it.Q4_K_S.gguf",
+      "sha256": "95c62e1c29f977c84fe5a5d9602a91213fd03a2c7b63f2884abab2ed7b5c5f57",
+      "estimatedBytes": 2377945600,
+      "serverCommand": "llama-server.exe",
+      "runtimeCandidates": ["{runtimeDir}/llama-b9867/win-vulkan/llama-server.exe", "{runtimeDir}/llama-b9867/win-cpu/llama-server.exe"],
+      "runtimeArchives": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/llama-b9867-bin-win-vulkan-x64.zip",
+          "sha256": "843333f1aa7d0c52d2e8ba346e635d2ef9832f0d6d667723351c60fd26d71454",
+          "estimatedBytes": 32164547,
+          "extractDir": "llama-b9867/win-vulkan"
+        },
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/llama-b9867-bin-win-cpu-x64.zip",
+          "sha256": "f2c64f32c5ce94e3b92bac030860ef3da6ec0e5b25eed3a5dc1d677f1da88547",
+          "estimatedBytes": 17486019,
+          "extractDir": "llama-b9867/win-cpu"
+        }
+      ],
+      "runtimeEstimatedBytes": 49650566,
+      "serverArgs": ["-m", "{modelPath}", "--port", "{port}", "-c", "2048", "-ngl", "99", "--jinja", "--chat-template-file", "{backendDir}/llama-chat-template.jinja"],
+      "baseUrl": "http://127.0.0.1:{port}/v1"
+    },
+    {
       "id": "windows-x64-llamacpp-translategemma-12b-q4",
       "platform": "win32",
       "arch": "x64",
@@ -114,10 +260,17 @@
       "sha256": "b7aac4b4be7ab0c49b6556c29c4467e74313df7f1e95d9f9676bb2adf0afa528",
       "estimatedBytes": 7300794112,
       "serverCommand": "llama-server.exe",
-      "runtimeCandidates": ["{runtimeDir}/llama-server.exe", "llama-server.exe", "llama-server"],
-      "runtimeArchiveUrl": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/llama-b9867-bin-win-cpu-x64.zip",
-      "runtimeArchiveSha256": "f2c64f32c5ce94e3b92bac030860ef3da6ec0e5b25eed3a5dc1d677f1da88547",
-      "runtimeEstimatedBytes": 45143904,
+      "runtimeId": "llama-b9867-win-cpu-x64",
+      "runtimeCandidates": ["{runtimeDir}/llama-b9867/win-cpu/llama-server.exe", "{runtimeDir}/llama-server.exe", "llama-server.exe", "llama-server"],
+      "runtimeArchives": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/llama-b9867-bin-win-cpu-x64.zip",
+          "sha256": "f2c64f32c5ce94e3b92bac030860ef3da6ec0e5b25eed3a5dc1d677f1da88547",
+          "estimatedBytes": 17486019,
+          "extractDir": "llama-b9867/win-cpu"
+        }
+      ],
+      "runtimeEstimatedBytes": 17486019,
       "serverArgs": ["-m", "{modelPath}", "--port", "{port}", "-c", "2048", "--jinja", "--chat-template-file", "{backendDir}/llama-chat-template.jinja"],
       "baseUrl": "http://127.0.0.1:{port}/v1"
     },
@@ -134,10 +287,17 @@
       "sha256": "95c62e1c29f977c84fe5a5d9602a91213fd03a2c7b63f2884abab2ed7b5c5f57",
       "estimatedBytes": 2377945600,
       "serverCommand": "llama-server.exe",
-      "runtimeCandidates": ["{runtimeDir}/llama-server.exe", "llama-server.exe", "llama-server"],
-      "runtimeArchiveUrl": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/llama-b9867-bin-win-cpu-x64.zip",
-      "runtimeArchiveSha256": "f2c64f32c5ce94e3b92bac030860ef3da6ec0e5b25eed3a5dc1d677f1da88547",
-      "runtimeEstimatedBytes": 45143904,
+      "runtimeId": "llama-b9867-win-cpu-x64",
+      "runtimeCandidates": ["{runtimeDir}/llama-b9867/win-cpu/llama-server.exe", "{runtimeDir}/llama-server.exe", "llama-server.exe", "llama-server"],
+      "runtimeArchives": [
+        {
+          "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9867/llama-b9867-bin-win-cpu-x64.zip",
+          "sha256": "f2c64f32c5ce94e3b92bac030860ef3da6ec0e5b25eed3a5dc1d677f1da88547",
+          "estimatedBytes": 17486019,
+          "extractDir": "llama-b9867/win-cpu"
+        }
+      ],
+      "runtimeEstimatedBytes": 17486019,
       "serverArgs": ["-m", "{modelPath}", "--port", "{port}", "-c", "2048", "--jinja", "--chat-template-file", "{backendDir}/llama-chat-template.jinja"],
       "baseUrl": "http://127.0.0.1:{port}/v1"
     },

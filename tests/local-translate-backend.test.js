@@ -635,6 +635,25 @@ describe('local translate backend', () => {
     expect(runtime).toBe(process.execPath)
   })
 
+  it('falls back when an accelerated llama runtime fails its device check', () => {
+    const failed = path.join(testRuntimeDir, 'failed-runtime')
+    const fallback = path.join(testRuntimeDir, 'fallback-runtime')
+    fs.writeFileSync(failed, '#!/bin/sh\nexit 1\n')
+    fs.writeFileSync(fallback, '#!/bin/sh\nexit 0\n')
+    fs.chmodSync(failed, 0o755)
+    fs.chmodSync(fallback, 0o755)
+
+    const status = backend.runtimeStatus({
+      id: 'runtime-fallback-test',
+      runtime: 'llama.cpp-vulkan',
+      runtimeCandidates: [failed, fallback]
+    })
+
+    expect(status.available).toBe(true)
+    expect(status.command).toBe(fallback)
+    expect(status.fallback).toBe(true)
+  })
+
   it('falls back to a downloadable runtime when the best hardware variant is unavailable', () => {
     const hardware = backend.detectHardware()
     const selected = backend.selectVariant({
@@ -698,6 +717,63 @@ describe('local translate backend', () => {
       minimumMemoryGb: 16,
       recommendedMemoryGb: 24
     })
+  })
+
+  it('chooses CUDA 12 from the NVIDIA driver without requiring a toolkit', () => {
+    expect(backend.chooseAccelerator({
+      platform: 'win32',
+      arch: 'x64',
+      gpuNames: ['NVIDIA GeForce RTX 4060'],
+      nvidiaDriverVersion: '555.99'
+    })).toBe('cuda')
+  })
+
+  it('uses Vulkan for old NVIDIA, AMD, and Intel graphics', () => {
+    expect(backend.chooseAccelerator({
+      platform: 'win32',
+      arch: 'x64',
+      gpuNames: ['NVIDIA GeForce GTX 1060'],
+      nvidiaDriverVersion: '472.12'
+    })).toBe('vulkan')
+    expect(backend.chooseAccelerator({ platform: 'win32', arch: 'x64', gpuNames: ['AMD Radeon RX 6600'] })).toBe('vulkan')
+    expect(backend.chooseAccelerator({ platform: 'win32', arch: 'x64', gpuNames: ['Intel Arc A770'] })).toBe('vulkan')
+  })
+
+  it('keeps CPU as the fallback when no graphics runtime is detectable', () => {
+    expect(backend.chooseAccelerator({ platform: 'linux', arch: 'x64' })).toBe('cpu')
+  })
+
+  it('recommends 12B only when accelerated memory is sufficient', () => {
+    const variant = { platform: 'win32', arch: 'x64', model: 'translategemma-12b-it' }
+    expect(backend.assessVariant(variant, {
+      platform: 'win32',
+      arch: 'x64',
+      accelerator: 'cuda',
+      totalMemGb: 32,
+      gpuMemoryGb: 12
+    }).level).toBe('recommended')
+    expect(backend.assessVariant(variant, {
+      platform: 'win32',
+      arch: 'x64',
+      accelerator: 'cuda',
+      totalMemGb: 32,
+      gpuMemoryGb: 8
+    }).level).toBe('slower')
+  })
+
+  it('selects CUDA variants for a supported NVIDIA driver', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src/pc/local-translate/model-manifest.json')))
+    const variants = backend.compatibleVariants(manifest, {
+      platform: 'win32',
+      arch: 'x64',
+      accelerator: 'cuda',
+      totalMemGb: 32,
+      gpuMemoryGb: 12
+    })
+
+    expect(variants).toHaveLength(2)
+    expect(variants.every((variant) => variant.accelerator === 'cuda')).toBe(true)
+    expect(variants.every((variant) => variant.runtimeArchives.length === 3)).toBe(true)
   })
 
   it('offers one 4B and one 12B choice for the current platform', () => {

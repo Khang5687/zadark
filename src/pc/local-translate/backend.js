@@ -587,20 +587,40 @@ function checkRuntimeStatus (variant) {
     return { available: false, message: 'Runtime command is not configured' }
   }
 
-  const command = resolveRuntimeCommand(variant)
-  if (!command) {
+  const candidates = (variant.runtimeCandidates && variant.runtimeCandidates.length)
+    ? variant.runtimeCandidates
+    : [variant.serverCommand]
+  const commands = candidates.map(replaceRuntimeTokens).filter(commandExists)
+  if (!commands.length) {
     return { available: false, message: `Runtime command not found: ${variant.serverCommand || variant.runtimeCandidates[0]}` }
   }
 
   if (variant.runtime === 'mlx') {
     try {
-      childProcess.execFileSync(command, ['-c', 'import mlx_lm.server'], { stdio: 'ignore' })
+      childProcess.execFileSync(commands[0], ['-c', 'import mlx_lm.server'], { stdio: 'ignore' })
     } catch (error) {
       return { available: false, message: 'MLX runtime is not installed' }
     }
   }
 
-  return { available: true, command, message: '' }
+  if (String(variant.runtime || '').startsWith('llama.cpp')) {
+    const command = commands.find((candidate) => {
+      try {
+        childProcess.execFileSync(candidate, ['--list-devices'], {
+          timeout: 10000,
+          windowsHide: true,
+          stdio: 'ignore'
+        })
+        return true
+      } catch (error) {
+        return false
+      }
+    })
+    if (!command) return { available: false, message: 'No local AI runtime passed the device check' }
+    return { available: true, command, fallback: command !== commands[0], message: '' }
+  }
+
+  return { available: true, command: commands[0], message: '' }
 }
 
 function runtimeStatus (variant) {
@@ -613,24 +633,76 @@ function runtimeStatus (variant) {
   return value
 }
 
+function safeCommandOutput (command, args) {
+  try {
+    return childProcess.execFileSync(command, args, {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 5000,
+      stdio: ['ignore', 'pipe', 'pipe']
+    }).trim()
+  } catch (error) {
+    return ''
+  }
+}
+
+function chooseAccelerator ({ platform, arch, gpuNames = [], nvidiaDriverVersion = '', vulkanAvailable = false }) {
+  if (platform === 'darwin' && arch === 'arm64') return 'mlx'
+  const hasNvidia = gpuNames.some((name) => /nvidia/i.test(name))
+  const driverMajor = Number.parseInt(String(nvidiaDriverVersion).split('.')[0], 10) || 0
+  if (hasNvidia && driverMajor >= 525) return 'cuda'
+  if (vulkanAvailable || gpuNames.length) return 'vulkan'
+  return 'cpu'
+}
+
 function detectHardware () {
   const platform = os.platform()
   const arch = os.arch()
-  let accelerator = 'cpu'
+  let gpuNames = []
+  let nvidiaDriverVersion = ''
+  let gpuMemoryGb = 0
 
-  if (platform === 'darwin' && arch === 'arm64') {
-    accelerator = 'mlx'
-  } else if (commandExists('nvidia-smi')) {
-    accelerator = 'cuda'
-  } else if (platform === 'win32') {
-    accelerator = 'vulkan'
+  if (platform === 'win32') {
+    const adapters = safeCommandOutput('powershell.exe', [
+      '-NoProfile',
+      '-Command',
+      'Get-CimInstance Win32_VideoController | ForEach-Object { "$($_.Name)|$($_.AdapterRAM)" }'
+    ]).split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+    gpuNames = adapters.map((line) => line.split('|')[0]).filter(Boolean)
+    gpuMemoryGb = adapters.reduce((maximum, line) => {
+      const bytes = Number(line.split('|')[1]) || 0
+      return Math.max(maximum, bytes / 1024 / 1024 / 1024)
+    }, 0)
+  } else if (platform === 'linux') {
+    gpuNames = safeCommandOutput('sh', ['-c', "lspci 2>/dev/null | grep -Ei 'vga|3d|display'"])
+      .split(/\r?\n/).map((name) => name.trim()).filter(Boolean)
   }
+
+  const nvidiaOutput = safeCommandOutput('nvidia-smi', [
+    '--query-gpu=name,driver_version,memory.total',
+    '--format=csv,noheader'
+  ])
+  if (nvidiaOutput) {
+    const fields = nvidiaOutput.split(/\r?\n/)[0].split(',').map((value) => value.trim())
+    if (fields[0] && !gpuNames.some((name) => name.includes(fields[0]))) gpuNames.push(fields[0])
+    nvidiaDriverVersion = fields[1] || ''
+    gpuMemoryGb = Math.max(gpuMemoryGb, (Number.parseInt(fields[2], 10) || 0) / 1024)
+  }
+
+  const vulkanAvailable = platform === 'win32'
+    ? gpuNames.length > 0
+    : !!safeCommandOutput('vulkaninfo', ['--summary'])
+  const accelerator = chooseAccelerator({ platform, arch, gpuNames, nvidiaDriverVersion, vulkanAvailable })
 
   return {
     platform,
     arch,
     accelerator,
-    totalMemGb: Math.round(os.totalmem() / 1024 / 1024 / 1024)
+    totalMemGb: Math.round(os.totalmem() / 1024 / 1024 / 1024),
+    gpuNames,
+    gpuMemoryGb: Number(gpuMemoryGb.toFixed(1)),
+    nvidiaDriverVersion,
+    vulkanAvailable
   }
 }
 
@@ -660,7 +732,11 @@ function assessVariant (variant, hardware) {
   if (hardware.totalMemGb < minimumMemoryGb) {
     return { level: 'not-recommended', minimumMemoryGb, recommendedMemoryGb }
   }
-  if (is12b && !(hardware.platform === 'darwin' && hardware.arch === 'arm64')) {
+  const accelerated12b = is12b && (
+    (hardware.platform === 'darwin' && hardware.arch === 'arm64' && hardware.totalMemGb >= recommendedMemoryGb) ||
+    (['cuda', 'vulkan'].includes(hardware.accelerator) && hardware.totalMemGb >= recommendedMemoryGb && hardware.gpuMemoryGb >= 10)
+  )
+  if (is12b && !accelerated12b) {
     return { level: 'slower', minimumMemoryGb, recommendedMemoryGb }
   }
   return {
@@ -786,10 +862,11 @@ function variantStatus (variant, storagePath) {
   const modelDir = modelDirFor(variant, root)
   const estimatedBytes = variant.estimatedBytes || 0
   const runtimeEstimatedBytes = variant.runtimeEstimatedBytes || 0
-  const downloadEstimatedBytes = estimatedBytes + runtimeEstimatedBytes
   const isSnapshot = variant.downloadKind === 'hf-snapshot'
   const runtime = runtimeStatus(variant)
   const installProgress = installProgressFor(variant, root)
+  const installed = isSnapshot ? snapshotInstalled(variant, root) : !!variant.modelUrl && fs.existsSync(modelPath)
+  const downloadEstimatedBytes = (installed ? 0 : estimatedBytes) + (runtime.available && !runtime.fallback ? 0 : runtimeEstimatedBytes)
   return {
     id: variant.id,
     runtime: variant.runtime,
@@ -800,7 +877,7 @@ function variantStatus (variant, storagePath) {
     downloadEstimatedBytes,
     storagePath: root,
     modelPath,
-    installed: isSnapshot ? snapshotInstalled(variant, root) : !!variant.modelUrl && fs.existsSync(modelPath),
+    installed,
     downloadable: isSnapshot || !!variant.modelUrl,
     runtimeDownloadable: isRuntimeDownloadable(variant),
     disk: getDiskInfo(root, downloadEstimatedBytes),
@@ -810,6 +887,7 @@ function variantStatus (variant, storagePath) {
     installProgress,
     runtimeAvailable: runtime.available,
     runtimeCommand: runtime.command || '',
+    runtimeFallback: !!runtime.fallback,
     runtimeMessage: runtime.message,
     idleTimeoutMs: IDLE_TIMEOUT_MS,
     lastUsedAt: state.lastUsedAt,
@@ -1000,7 +1078,7 @@ async function runInstallVariant (variant, storagePath, onProgress) {
 
 async function installRuntimeVariant (variant, onProgress) {
   const runtime = runtimeStatus(variant)
-  if (runtime.available) return { path: runtime.command, alreadyInstalled: true }
+  if (runtime.available && !runtime.fallback) return { path: runtime.command, alreadyInstalled: true }
 
   if (Array.isArray(variant.runtimeArchives) && variant.runtimeArchives.length) {
     let downloadedBytes = 0
@@ -2058,6 +2136,7 @@ module.exports = {
   buildTranslationRequest,
   buildFootnotePrompt,
   compatibleVariants,
+  chooseAccelerator,
   detectHardware,
   getDiskInfo,
   installVariant,

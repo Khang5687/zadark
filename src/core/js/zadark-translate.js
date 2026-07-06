@@ -886,7 +886,7 @@
       }
       const retry = () => {
         const $retry = $('<button>')
-          .addClass('zadark-translate-msg__retry')
+          .addClass('zadark-translate-msg__content__retry')
           .attr('type', 'button')
           .text('Thử lại')
         $retry.on('click', (event) => {

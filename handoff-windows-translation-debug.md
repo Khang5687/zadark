@@ -47,6 +47,18 @@ Release `26.3.1` addressed the reported Windows failures:
 - Filtered CUDA from non-NVIDIA machines and Vulkan from machines where it is unavailable.
 - Added GTX 1650 coverage proving that both models remain available while 12B is assessed as slower.
 
+Windows RTX 3060 Laptop validation started on 2026-07-06:
+
+- Windows 11 IoT Enterprise LTSC 24H2 (`10.0.26100`), Ryzen 5 5600H, 32 GB RAM.
+- NVIDIA GeForce RTX 3060 Laptop GPU, driver `581.83`, 6144 MiB VRAM according to `nvidia-smi`.
+- CIM also reports AMD integrated graphics and a virtual display, and truncates NVIDIA `AdapterRAM` to about 4 GB. Backend detection correctly uses the 6 GB `nvidia-smi` result.
+- Auto selected CUDA; explicit CUDA, Vulkan, and CPU each returned both 4B and 12B variants. The 4B model was recommended and 12B was labeled slower.
+- Before the fix, initial status took 3.7 seconds and cached requests still took about 1.6 seconds. Profiling found that every variant launched PowerShell separately for disk statistics. The backend now uses native `fs.statfsSync` where available and retains the previous platform-command fallback.
+- After the fix, the first Auto request took 478 ms, explicit CUDA and Vulkan took 5 ms and 4 ms, and a repeated Auto request took 4 ms. The first CPU request took 215 ms because it populated a distinct runtime probe cache.
+- The focused backend suite initially exposed four Windows-only test-fixture failures: a POSIX permission assertion, two executable shell-script fixtures, and a macOS-variant download test. The permission assertion is now Unix-only and the platform-specific runtime/download fixtures are skipped on Windows.
+- Backend self-check and Standard lint pass. The build passes with `$env:NODE_ENV='development'; npx gulp build`.
+- The package scripts use Unix-style inline environment assignment, so `yarn build` fails under PowerShell with `NODE_ENV is not recognized`. Use the PowerShell command above until the scripts are made cross-platform.
+
 Automated verification at handoff:
 
 - `npm test`: 91 tests passed.
@@ -62,7 +74,7 @@ Automated verification at handoff:
 - `src/core/js/zadark-translate.js`: translation calls and persisted accelerator mode.
 - `src/pc/assets/js/zadark-main.js`: bundled backend lifecycle inside Zalo/ZaDark.
 - `tests/local-translate-backend.test.js`: hardware, Windows runtime, model selection, download, and fallback tests.
-- `src/pc/local-translate/README.md`: architecture and storage estimates. Its statement that CUDA is automatic-only is stale and should be corrected after Windows behavior is confirmed.
+- `src/pc/local-translate/README.md`: architecture and storage estimates. Its accelerator description was updated after physical Windows validation to document explicit CUDA selection.
 
 ## Windows Test Procedure
 

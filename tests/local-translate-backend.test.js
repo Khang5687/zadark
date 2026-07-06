@@ -352,6 +352,17 @@ describe('local translate backend', () => {
     expect(disk.freeBytes).toBe(61440)
   })
 
+  it('reads disk space without starting a platform shell when statfs is available', () => {
+    const exec = vi.spyOn(childProcess, 'execFileSync')
+    const disk = backend.getDiskInfo(tempDir, 1024)
+
+    expect(disk.available).toBe(true)
+    expect(disk.totalBytes).toBeGreaterThan(0)
+    expect(disk.freeBytes).toBeGreaterThan(0)
+    expect(exec).not.toHaveBeenCalled()
+    exec.mockRestore()
+  })
+
   it('builds one bounded TranslateGemma request with conversation context', () => {
     const request = backend.buildTranslationRequest({
       runtime: 'llama.cpp',
@@ -439,7 +450,9 @@ describe('local translate backend', () => {
 
       const stored = fs.readFileSync(testCloudConfig, 'utf8')
       expect(stored).not.toContain('secret-key')
-      expect(fs.statSync(testCloudConfig).mode & 0o777).toBe(0o600)
+      if (process.platform !== 'win32') {
+        expect(fs.statSync(testCloudConfig).mode & 0o777).toBe(0o600)
+      }
 
       const publicConfig = await requestJson(baseUrl, '/v1/cloud-translate/config')
       expect(publicConfig.body.hasApiKey).toBe(true)
@@ -635,7 +648,7 @@ describe('local translate backend', () => {
     expect(runtime).toBe(process.execPath)
   })
 
-  it('falls back when an accelerated llama runtime fails its device check', () => {
+  it.skipIf(process.platform === 'win32')('falls back when an accelerated llama runtime fails its device check', () => {
     const failed = path.join(testRuntimeDir, 'failed-runtime')
     const fallback = path.join(testRuntimeDir, 'fallback-runtime')
     fs.writeFileSync(failed, '#!/bin/sh\nexit 1\n')
@@ -889,7 +902,7 @@ describe('local translate backend', () => {
     expect(selected.id).toBe('compatible')
   })
 
-  it('caches runtime readiness checks briefly', () => {
+  it.skipIf(process.platform === 'win32')('caches runtime readiness checks briefly', () => {
     const runtimePath = path.join(tempDir, 'fake-mlx-runtime')
     const callsPath = path.join(tempDir, 'fake-mlx-runtime-calls')
     fs.writeFileSync(runtimePath, `#!/bin/sh\necho call >> ${JSON.stringify(callsPath)}\n`)
@@ -1522,7 +1535,7 @@ describe('local translate backend', () => {
     }
   })
 
-  it('does not delete a model while a snapshot download is running', async () => {
+  it.skipIf(process.platform === 'win32')('does not delete a model while a snapshot download is running', async () => {
     const previousEndpoint = process.env.ZADARK_HF_ENDPOINT
     process.env.ZADARK_HF_ENDPOINT = hfBaseUrl
     releaseSlowDownload = null

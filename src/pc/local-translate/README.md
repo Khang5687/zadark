@@ -57,8 +57,8 @@ Windows x64 detects display adapters and the NVIDIA driver without requiring a
 CUDA Toolkit. NVIDIA driver 525 or newer selects the pinned CUDA 12.4 bundle;
 other NVIDIA, AMD, and Intel adapters select Vulkan. Both accelerated downloads
 include the small CPU runtime as an offline fallback. A failed `--list-devices`
-probe falls through to CPU. Settings expose Auto, CPU, and Vulkan modes; CUDA is
-automatic only when compatible hardware is detected.
+probe falls through to CPU. Settings expose Auto, CPU, Vulkan, and CUDA modes;
+CUDA is offered only when compatible NVIDIA hardware is detected.
 
 Intel macOS and Linux x64 use pinned official llama.cpp CPU runtimes.
 

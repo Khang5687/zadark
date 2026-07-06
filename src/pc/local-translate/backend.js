@@ -453,7 +453,11 @@ function getDiskInfo (storagePath, estimatedBytes = 0) {
     let totalBytes
     let freeBytes
 
-    if (os.platform() === 'win32') {
+    if (typeof fs.statfsSync === 'function') {
+      const stats = fs.statfsSync(existingParent(storagePath))
+      totalBytes = Number(stats.blocks) * Number(stats.bsize)
+      freeBytes = Number(stats.bavail) * Number(stats.bsize)
+    } else if (os.platform() === 'win32') {
       const driveName = getWindowsDriveName(storagePath)
       const output = childProcess.execFileSync('powershell.exe', [
         '-NoProfile',

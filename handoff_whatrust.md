@@ -652,6 +652,21 @@ Recent checks that have passed during this work:
   old-NVIDIA/AMD/Intel Vulkan selection, CPU fallback, isolated multi-archive
   extraction, accelerator cleanup, and manual Auto/CPU/Vulkan modes. Real
   Windows hardware verification is still required before release.
+- A 2026-07-06 physical Windows check on an RTX 3060 Laptop GPU (6 GB,
+  driver 581.83) confirmed that Auto selects CUDA and explicit CUDA, Vulkan,
+  and CPU modes each expose both 4B and 12B. CIM truncated VRAM to about 4 GB,
+  while `nvidia-smi` reported the correct 6 GB; ZaDark used the latter. The
+  check also exposed repeated PowerShell disk probes adding about 1.6 seconds
+  to cached status calls, so disk-space status now uses native filesystem
+  statistics where the Node runtime supports them. Cached status dropped to
+  4-5 ms after the change; first Auto status took 478 ms.
+- On the same Windows checkout, backend self-check, Standard lint, and the
+  PowerShell-equivalent Gulp build passed. ZaDark's package scripts currently
+  use Unix-style inline `NODE_ENV` assignment, so `yarn build` itself is not
+  PowerShell-compatible.
+- The backend tests were made platform-correct for this validation: Unix file
+  modes, shell-script runtime fixtures, and a macOS-variant download fixture
+  are no longer asserted on Windows.
 
 ### Vietnamese model benchmark
 

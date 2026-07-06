@@ -426,8 +426,17 @@
       const modelName = (variant) => String(variant.model || '').includes('12b') ? 'TranslateGemma 12B' : 'TranslateGemma 4B'
       const capabilityText = (variant) => {
         const level = variant.capability && variant.capability.level
-        if (level === 'recommended') return 'Phù hợp với máy này. Chất lượng dịch tốt nhất, nhưng tải và chạy chậm hơn.'
-        if (level === 'supported') return 'Máy này có thể chạy, nhưng 4B sẽ nhẹ và phản hồi nhanh hơn.'
+        const is12b = String(variant.model || '').includes('12b')
+        if (level === 'recommended') {
+          return is12b
+            ? 'Phù hợp với máy này. Chất lượng dịch tốt nhất, nhưng tải và chạy chậm hơn.'
+            : 'Mặc định khuyên dùng. Nhẹ hơn, tải nhanh và phản hồi nhanh hơn.'
+        }
+        if (level === 'supported') {
+          return is12b
+            ? 'Máy này có thể chạy, nhưng 4B sẽ nhẹ và phản hồi nhanh hơn.'
+            : 'Phù hợp với máy này và dùng ít tài nguyên hơn.'
+        }
         if (level === 'slower') return 'Có thể chạy, nhưng dự kiến chậm trên máy này. 4B được khuyên dùng.'
         if (level === 'not-recommended') return `Không khuyên dùng: cần ít nhất ${variant.capability.minimumMemoryGb} GB RAM. Model có thể chạy chậm hoặc hết bộ nhớ.`
         return 'Không tương thích với máy này.'
@@ -548,7 +557,7 @@
       $dialog.on('change', '.zadark-local-translate-dialog__select', async function () {
         const variantId = $(this).val()
         $dialog.find('.zadark-local-translate-dialog__select').prop('disabled', true)
-        $error.removeClass('zadark-local-translate-dialog__error--status').text('Đang kiểm tra dung lượng...')
+        $error.text('')
         try {
           const refreshedStatus = await getLocalTranslateStatus(variantId)
           selected = refreshedStatus.selected
